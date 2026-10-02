@@ -6,6 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../config/di/providers.dart';
 import '../../config/di/view_models.dart';
 import '../../data/models/chat_message.dart';
+import '../../data/models/model_descriptor.dart';
+import '../../data/models/sampler_settings.dart';
+import '../../domain/services/history_window.dart';
 import '../../domain/services/llm_service.dart';
 import '../../domain/services/token_collector.dart';
 import 'chat_state.dart';
@@ -55,6 +58,7 @@ class ChatViewModel extends Notifier<ChatState> {
     final prompt = text.trim();
     if (prompt.isEmpty || !state.canSend) return;
 
+    final prior = state.messages;
     final user = ChatMessage(
       id: _uuid.v4(),
       role: MessageRole.user,
@@ -62,13 +66,25 @@ class ChatViewModel extends Notifier<ChatState> {
       createdAt: DateTime.now(),
       attachmentName: state.attachmentName,
     );
-    await _commit(<ChatMessage>[
-      ...state.messages,
-      user,
-    ], title: _title(prompt));
+    await _commit(<ChatMessage>[...prior, user], title: _title(prompt));
     state = state.copyWith(clearAttachment: true);
+    await _reseat(prior);
     await _generate(prompt);
   }
+
+  /// Puts the model's context back in step with the user's memory budget.
+  ///
+  /// A no-op on most turns — see [needsHistoryReseat] for when it is not.
+  Future<void> _reseat(List<ChatMessage> prior) async {
+    final turns = await _historyTurns();
+    if (!needsHistoryReseat(prior, turns)) return;
+    await ref
+        .read(llmServiceProvider)
+        .restoreHistory(historyWindow(prior, turns));
+  }
+
+  Future<int> _historyTurns() async =>
+      (await ref.read(samplerViewModelProvider.future)).historyTurns;
 
   /// Drops the last reply and asks the preceding question again.
   Future<void> regenerate() async {
@@ -80,9 +96,10 @@ class ChatViewModel extends Notifier<ChatState> {
     await _commit(messages.sublist(0, prompt + 1));
     // Rewind the model's context to just before the question, otherwise the
     // discarded reply would still be in scope when it answers again.
+    final turns = await _historyTurns();
     await ref
         .read(llmServiceProvider)
-        .restoreHistory(messages.sublist(0, prompt));
+        .restoreHistory(historyWindow(messages.sublist(0, prompt), turns));
     await _generate(messages[prompt].text);
   }
 
@@ -108,22 +125,29 @@ class ChatViewModel extends Notifier<ChatState> {
       final library = await ref.read(modelLibraryViewModelProvider.future);
       final model = library.active;
       if (model == null) {
-        state = state.copyWith(status: ChatStatus.noModel, clearError: true);
+        state = state.copyWith(
+          status: ChatStatus.noModel,
+          clearError: true,
+          clearNotice: true,
+        );
         return;
       }
 
       final settings = await ref.read(samplerViewModelProvider.future);
       // Reload when the user switched models in Settings: the loaded weights
       // are still valid, they are simply the wrong ones.
+      var notice = state.notice;
       if (!llm.isLoaded || llm.loadedModelId != model.id) {
-        await llm.load(
-          model: model,
-          settings: settings,
-          runtime: await ref.read(appSettingsViewModelProvider.future),
-        );
+        notice = await _load(model, settings);
       }
-      await llm.restoreHistory(state.messages);
-      state = state.copyWith(status: ChatStatus.ready);
+      await llm.restoreHistory(
+        historyWindow(state.messages, settings.historyTurns),
+      );
+      state = state.copyWith(
+        status: ChatStatus.ready,
+        notice: notice,
+        clearNotice: notice == null,
+      );
     } catch (error, stackTrace) {
       developer.log(
         'Could not prepare the model',
@@ -133,8 +157,38 @@ class ChatViewModel extends Notifier<ChatState> {
       );
       state = state.copyWith(
         status: ChatStatus.failed,
-        error: _describe(error),
+        error: _describeLoad(error),
+        clearNotice: true,
       );
+    }
+  }
+
+  /// Loads [model], dropping GPU offload rather than giving up on it.
+  ///
+  /// Returns a line to show the user, or null when the load went as asked. The
+  /// retry is deliberately not written back to settings: a refused GPU
+  /// allocation is about this model on this run, so the next one gets another
+  /// chance rather than being quietly demoted forever.
+  Future<String?> _load(ModelDescriptor model, SamplerSettings settings) async {
+    final llm = ref.read(llmServiceProvider);
+    final runtime = await ref.read(appSettingsViewModelProvider.future);
+    try {
+      await llm.load(model: model, settings: settings, runtime: runtime);
+      return null;
+    } catch (error, stackTrace) {
+      if (!runtime.useGpu) rethrow;
+      developer.log(
+        'GPU load failed, retrying on the CPU',
+        name: _logName,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      await llm.load(
+        model: model,
+        settings: settings,
+        runtime: runtime.copyWith(useGpu: false),
+      );
+      return 'Loaded on the CPU — GPU offload was unavailable.';
     }
   }
 
@@ -187,7 +241,7 @@ class ChatViewModel extends Notifier<ChatState> {
         error: error,
         stackTrace: stackTrace,
       );
-      return _describe(error);
+      return _describeGeneration(error);
     }
   }
 
@@ -243,8 +297,19 @@ class ChatViewModel extends Notifier<ChatState> {
     return -1;
   }
 
-  static String _describe(Object error) => switch (error) {
+  /// Describes a failure to get the model ready.
+  ///
+  /// Kept apart from [_describeGeneration] because the two are different
+  /// events: a model that never loaded has generated nothing, and labelling it
+  /// "Generation failed" sends the user looking in the wrong place.
+  static String _describeLoad(Object error) => switch (error) {
     ModelMissingException() => error.toString(),
+    ModelLoadException() => error.toString(),
+    StateError() => error.message,
+    _ => 'Could not load the model: $error',
+  };
+
+  static String _describeGeneration(Object error) => switch (error) {
     StateError() => error.message,
     _ => 'Generation failed: $error',
   };

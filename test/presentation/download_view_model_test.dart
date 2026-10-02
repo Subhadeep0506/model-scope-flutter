@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:checks/checks.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,16 +21,45 @@ void main() {
   late FakeModelLibraryRepository library;
   late FakeApiKeyRepository keys;
   late ProviderContainer container;
+  late Directory directory;
+  late String downloadedPath;
+
+  /// Stands in for the finished file. Small, but real: the view model stats
+  /// what landed before it records it, so a fictional path would take the
+  /// could-not-measure branch instead of the one under test.
+  const int sizeBytes = 2048;
 
   final HfRepoSummary repo = fakeRepo();
-  final GgufFile file = fakeGgufFile();
+  final GgufFile file = fakeGgufFile(sizeBytes: sizeBytes);
+
+  /// Replaces the downloaded file with one of [bytes], standing in for a
+  /// transfer that was cut off part-way.
+  Future<void> writeWeights(int bytes) =>
+      File(downloadedPath).writeAsBytes(List<int>.filled(bytes, 0));
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp('model_scope_download');
+    downloadedPath = '${directory.path}${Platform.pathSeparator}model.gguf';
+    await writeWeights(sizeBytes);
+  });
+
+  tearDown(() async {
+    if (await directory.exists()) await directory.delete(recursive: true);
+  });
 
   ProviderContainer containerWith({
     List<DownloadProgress>? script,
     StreamController<DownloadProgress>? controller,
     Map<ApiKeyKind, String>? storedKeys,
   }) {
-    downloader = FakeModelDownloader(script: script)..controller = controller;
+    downloader = FakeModelDownloader(
+      script:
+          script ??
+          <DownloadProgress>[
+            const Downloading(received: 50, total: 100),
+            DownloadCompleted(downloadedPath),
+          ],
+    )..controller = controller;
     library = FakeModelLibraryRepository();
     keys = FakeApiKeyRepository(storedKeys);
     return ProviderContainer.test(
@@ -60,7 +90,7 @@ void main() {
     // Assert — the path is the downloader's, not a guess at where it put it.
     final installed = (await libraryState()).models.single;
     check(installed.id).equals(file.id);
-    check(installed.localPath).equals('/cache/model.gguf');
+    check(installed.localPath).equals(downloadedPath);
     check(installed.quantization).equals('Q8_0');
     check(installed.sizeBytes).equals(file.sizeBytes);
     check(installed.name).equals('SmolLM2 360M Instruct');
@@ -81,7 +111,10 @@ void main() {
     // Arrange
     container = containerWith();
     await notifier().start(repo: repo, file: file);
-    final second = fakeGgufFile(fileName: 'smollm2-360m-instruct-q4_k_m.gguf');
+    final second = fakeGgufFile(
+      fileName: 'smollm2-360m-instruct-q4_k_m.gguf',
+      sizeBytes: sizeBytes,
+    );
 
     // Act
     await notifier().start(repo: repo, file: second);
@@ -162,6 +195,46 @@ void main() {
     // Assert
     check(notifier().progressOf(file.id)).isA<DownloadFailed>();
     check((await libraryState()).models).isEmpty();
+  });
+
+  test('a download that arrived short is refused, not installed', () async {
+    // Arrange — the downloader cannot resume or cancel, so a connection that
+    // drops still ends the stream as completed, with a partial file behind it.
+    container = containerWith();
+    await writeWeights(sizeBytes ~/ 4);
+
+    // Act
+    await notifier().start(repo: repo, file: file);
+
+    // Assert — caught here, the user retries a chip; missed, it surfaces much
+    // later as an unreadable native error on the chat screen.
+    check(notifier().progressOf(file.id)).isA<DownloadFailed>();
+    check((await libraryState()).models).isEmpty();
+  });
+
+  test('the partial file is deleted so a retry starts clean', () async {
+    // Arrange
+    container = containerWith();
+    await writeWeights(sizeBytes ~/ 4);
+
+    // Act
+    await notifier().start(repo: repo, file: file);
+
+    // Assert — left in place, the next attempt would find a cached model of
+    // the right name and the wrong length.
+    check(await File(downloadedPath).exists()).isFalse();
+  });
+
+  test('a download of the expected length still installs', () async {
+    // Arrange — the guard must not reject a model that is simply finished.
+    container = containerWith();
+
+    // Act
+    await notifier().start(repo: repo, file: file);
+
+    // Assert
+    check(notifier().progressOf(file.id)).isA<DownloadCompleted>();
+    check((await libraryState()).models).length.equals(1);
   });
 
   test('dismiss clears a finished entry so the chips come back', () async {

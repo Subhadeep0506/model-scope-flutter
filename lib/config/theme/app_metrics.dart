@@ -30,6 +30,14 @@ class AppMetrics extends ThemeExtension<AppMetrics> {
   /// A user bubble never grows past this fraction of the content width.
   double get bubbleMaxWidthFactor => 0.68;
 
+  /// A modal sheet never grows past this fraction of the window height.
+  ///
+  /// Without it an `isScrollControlled` sheet with a scrolling body takes
+  /// every pixel it is offered and its title row ends up flush against the
+  /// status bar. The remaining sixth also keeps the scrim visible, so it still
+  /// reads as a sheet over the screen rather than a new page.
+  double get sheetMaxHeightFactor => 0.85;
+
   double get radiusCard => 10;
   double get radiusControl => 10;
   double get radiusBubble => 10;

@@ -99,25 +99,43 @@ class _SessionList extends ConsumerWidget {
     );
   }
 
+  /// Asks before deleting, as removing a model in Settings does.
+  ///
+  /// A transcript is not recoverable once it is gone, so the decision is made
+  /// up front rather than left to a snackbar the user has to catch in time.
   Future<void> _delete(
     BuildContext context,
     WidgetRef ref,
     ChatSession session,
   ) async {
-    final notifier = ref.read(sessionsViewModelProvider.notifier);
-    final messenger = ScaffoldMessenger.of(context);
-    await notifier.delete(session.id);
-
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Deleted "${session.title}"'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => notifier.restore(session),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${session.title}"?'),
+        content: Text(
+          'This removes ${session.messageCount} '
+          '${session.messageCount == 1 ? 'message' : 'messages'} and cannot '
+          'be undone.',
         ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: context.palette.danger,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
+
+    if (confirmed ?? false) {
+      await ref.read(sessionsViewModelProvider.notifier).delete(session.id);
+    }
   }
 }
 

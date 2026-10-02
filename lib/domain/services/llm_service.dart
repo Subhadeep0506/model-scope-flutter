@@ -22,6 +22,61 @@ class ModelMissingException implements Exception {
       'Settings and download it again.';
 }
 
+/// Thrown by [LlmService.load] when the weights are present but the native
+/// loader refused them.
+///
+/// Carries the settings the attempt ran with, because the native message on its
+/// own is often just `Failed to load model:` with nothing after it — true and
+/// useless. Knowing the context size, whether GPU offload was on, and how the
+/// file's length compares to what was downloaded is what separates a corrupt
+/// download from a driver that would not allocate from a GGUF this build cannot
+/// read. Declared here rather than in the `nobodywho` adapter so the view
+/// models can match on it without importing the package.
+class ModelLoadException implements Exception {
+  const ModelLoadException({
+    required this.name,
+    required this.path,
+    required this.contextLength,
+    required this.useGpu,
+    required this.sizeOnDisk,
+    required this.expectedSize,
+    required this.cause,
+  });
+
+  final String name;
+  final String path;
+  final int contextLength;
+  final bool useGpu;
+
+  /// Bytes actually on disk, or null when the length could not be read.
+  final int? sizeOnDisk;
+
+  /// Bytes the catalog said the file has.
+  final int expectedSize;
+
+  /// The native error, which may be empty.
+  final Object cause;
+
+  /// Whether the file is shorter than it should be — the likeliest cause, and
+  /// worth saying first.
+  bool get isTruncated {
+    final size = sizeOnDisk;
+    return size != null && size < expectedSize;
+  }
+
+  @override
+  String toString() {
+    final detail = cause.toString().trim();
+    final reason = detail.isEmpty ? 'no reason given' : detail;
+    if (isTruncated) {
+      return 'Could not load $name: the file is incomplete, $sizeOnDisk of '
+          '$expectedSize bytes. Remove it in Settings and download it again.';
+    }
+    return 'Could not load $name ($reason). Context $contextLength, GPU '
+        '${useGpu ? 'on' : 'off'}, $sizeOnDisk bytes at $path.';
+  }
+}
+
 /// The app's view of an on-device language model.
 ///
 /// Everything above this interface is free of `package:nobodywho`, which keeps

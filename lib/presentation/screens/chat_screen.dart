@@ -96,6 +96,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 onTap: () => LoadedModelsSheet.show(context),
               ),
             ),
+            if (state.notice case final notice?) _Notice(text: notice),
             SizedBox(height: metrics.gapLg),
             Expanded(
               child: _Body(state: state, controller: _scroll),
@@ -127,6 +128,47 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final name = await ref.read(attachmentPickerProvider).pick(kind);
     if (name == null) return;
     ref.read(chatViewModelProvider.notifier).attach(name);
+  }
+}
+
+/// One line about how the model loaded, under the model strip.
+///
+/// Not an error card: the chat works, the user is simply told that it is not
+/// running the way Settings asked — otherwise a slow reply looks like a bug.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = context.metrics;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        metrics.pagePadding,
+        metrics.gapSm,
+        metrics.pagePadding,
+        0,
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            Icons.info_outline_rounded,
+            size: 14,
+            color: context.palette.warning,
+          ),
+          SizedBox(width: metrics.gapSm),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.palette.warning),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

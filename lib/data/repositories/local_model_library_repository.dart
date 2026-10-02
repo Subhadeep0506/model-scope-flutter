@@ -8,9 +8,10 @@ import 'model_library_repository.dart';
 /// [ModelLibraryRepository] backed by `models.json` in the documents directory.
 ///
 /// Weights themselves live in `nobodywho`'s download cache, not in a directory
-/// the app owns, so every load re-checks that each recorded file is still
-/// there. Without that, clearing storage from the OS settings would leave Chat
-/// pointing at a path that no longer exists and failing with a native error.
+/// the app owns, so every load re-checks that each recorded file is still there
+/// and still whole. Without that, clearing storage from the OS settings — or a
+/// download that was cut short — would leave Chat pointing at a path it cannot
+/// load and failing with a native error.
 class LocalModelLibraryRepository implements ModelLibraryRepository {
   const LocalModelLibraryRepository(this._store);
 
@@ -28,14 +29,7 @@ class LocalModelLibraryRepository implements ModelLibraryRepository {
     final stored = _parse(document[_modelsKey]);
     final present = <ModelDescriptor>[];
     for (final model in stored) {
-      if (await File(model.localPath).exists()) {
-        present.add(model);
-        continue;
-      }
-      developer.log(
-        'Dropping ${model.id}: ${model.localPath} is gone',
-        name: _logName,
-      );
+      if (await _isUsable(model)) present.add(model);
     }
 
     final activeId = document[_activeKey];
@@ -64,6 +58,37 @@ class LocalModelLibraryRepository implements ModelLibraryRepository {
     ],
     _activeKey: library.activeId,
   });
+
+  /// Whether [model]'s weights are still on disk and whole.
+  ///
+  /// The length matters as much as the existence: the downloader can neither
+  /// resume nor cancel, so a transfer that died part-way leaves a short `.gguf`
+  /// which passes `exists()` and then fails deep inside the native loader with
+  /// an unreadable error. Compared against [ModelDescriptor.sizeBytes], which
+  /// is Hugging Face's own `lfs.size` for the file.
+  Future<bool> _isUsable(ModelDescriptor model) async {
+    final file = File(model.localPath);
+    if (!await file.exists()) {
+      developer.log(
+        'Dropping ${model.id}: ${model.localPath} is gone',
+        name: _logName,
+      );
+      return false;
+    }
+
+    final length = await file.length();
+    // Only a *short* file is rejected. A longer one is odd but readable, and
+    // refusing it over a byte count Hugging Face reported differently would
+    // throw away a model that works.
+    if (length < model.sizeBytes) {
+      developer.log(
+        'Dropping ${model.id}: $length of ${model.sizeBytes} bytes on disk',
+        name: _logName,
+      );
+      return false;
+    }
+    return true;
+  }
 
   static List<ModelDescriptor> _parse(Object? raw) {
     if (raw is! List) return const <ModelDescriptor>[];

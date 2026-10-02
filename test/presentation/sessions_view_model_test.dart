@@ -87,29 +87,25 @@ void main() {
           .equals(created.id);
     });
 
-    test('delete removes the session and restore puts it back', () async {
+    test('delete removes the session and persists the rest', () async {
       // Arrange
-      final seed = sessionWith(id: 'a', title: 'Keep me');
-      final container = containerWith(<ChatSession>[
-        seed,
+      final repository = FakeSessionRepository(<ChatSession>[
+        sessionWith(id: 'a', title: 'Drop me'),
         sessionWith(id: 'b'),
       ]);
+      final container = ProviderContainer.test(
+        overrides: fakeOverrides(llm: FakeLlmService(), sessions: repository),
+      );
       await container.read(sessionsViewModelProvider.future);
-      final notifier = container.read(sessionsViewModelProvider.notifier);
 
       // Act
-      await notifier.delete('a');
-      final afterDelete = container.read(sessionsViewModelProvider).value;
-      await notifier.restore(seed);
-      final afterRestore = container.read(sessionsViewModelProvider).value;
+      await container.read(sessionsViewModelProvider.notifier).delete('a');
 
       // Assert
-      check(afterDelete?.map((s) => s.id).toList())
+      check(container.read(sessionsViewModelProvider).value?.map((s) => s.id))
           .isNotNull()
           .deepEquals(<String>['b']);
-      check(afterRestore?.map((s) => s.id).toList())
-          .isNotNull()
-          .unorderedEquals(<String>['a', 'b']);
+      check(repository.stored.map((s) => s.id)).deepEquals(<String>['b']);
     });
 
     test(

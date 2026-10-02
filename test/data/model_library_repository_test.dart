@@ -17,16 +17,33 @@ void main() {
   late Directory directory;
   late LocalModelLibraryRepository repository;
 
+  /// Stands in for the bytes of a downloaded model. ASCII, so its character
+  /// count is also its length on disk.
+  const weights = 'GGUF-pretend-weights';
+
   /// Creates a stand-in for downloaded weights and returns a model pointing
   /// at it. The weights live outside the app's directory in production, which
   /// is exactly why `load` re-checks them.
+  ///
+  /// The recorded `sizeBytes` matches what is written, so an ordinary model
+  /// reads as whole. [truncated] writes fewer bytes than recorded, standing in
+  /// for a download that was cut off — the downloader cannot resume, so the
+  /// partial file is simply left behind.
   Future<ModelDescriptor> installed({
     String fileName = 'smollm2-360m-instruct-q8_0.gguf',
     bool onDisk = true,
+    bool truncated = false,
   }) async {
     final path = '${directory.path}${Platform.pathSeparator}$fileName';
-    if (onDisk) await File(path).writeAsString('weights');
-    return fakeInstalledModel(fileName: fileName, localPath: path);
+    if (onDisk) {
+      await File(path)
+          .writeAsString(truncated ? weights.substring(0, 4) : weights);
+    }
+    return fakeInstalledModel(
+      fileName: fileName,
+      localPath: path,
+      sizeBytes: weights.length,
+    );
   }
 
   setUp(() async {
@@ -88,6 +105,49 @@ void main() {
 
     // Assert — a dangling path would fail inside the native loader instead.
     check(library.models.map((m) => m.id)).deepEquals(<String>[present.id]);
+  });
+
+  test('a model shorter than its recorded size is dropped on load', () async {
+    // Arrange — a transfer that died part-way leaves a file that exists and
+    // cannot be read, which fails much later inside the native loader.
+    final whole = await installed();
+    final partial = await installed(
+      fileName: 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
+      truncated: true,
+    );
+    await repository.save(
+      ModelLibrary(
+        models: <ModelDescriptor>[whole, partial],
+        activeId: whole.id,
+      ),
+    );
+
+    // Act
+    final library = await repository.load();
+
+    // Assert
+    check(library.models.map((m) => m.id)).deepEquals(<String>[whole.id]);
+  });
+
+  test('an active id pointing at a partial download is repaired', () async {
+    // Arrange
+    final whole = await installed();
+    final partial = await installed(
+      fileName: 'cut-short.gguf',
+      truncated: true,
+    );
+    await repository.save(
+      ModelLibrary(
+        models: <ModelDescriptor>[whole, partial],
+        activeId: partial.id,
+      ),
+    );
+
+    // Act
+    final library = await repository.load();
+
+    // Assert — Chat opens on something it can actually load.
+    check(library.activeId).equals(whole.id);
   });
 
   test('the repair is written back, not recomputed every launch', () async {

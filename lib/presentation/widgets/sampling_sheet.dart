@@ -146,6 +146,19 @@ class _SamplingSheetState extends ConsumerState<SamplingSheet> {
       onChanged: (v) => _drag(settings.copyWith(maxTokens: v.round())),
       onChangeEnd: (v) => _commit(settings.copyWith(maxTokens: v.round())),
     ),
+    LabelledSlider(
+      label: 'CHAT_MEMORY',
+      value: settings.historyTurns.toDouble(),
+      // Zero is a setting, not an absence of one: it answers every prompt with
+      // no recollection of the conversation, which is worth being able to say.
+      display: settings.historyTurns == 0
+          ? 'OFF'
+          : '${settings.historyTurns} turns',
+      range: asDoubles(SamplerSettings.historyTurnsRange),
+      divisions: 50,
+      onChanged: (v) => _drag(settings.copyWith(historyTurns: v.round())),
+      onChangeEnd: (v) => _commit(settings.copyWith(historyTurns: v.round())),
+    ),
   ];
 }
 

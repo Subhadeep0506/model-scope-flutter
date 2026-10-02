@@ -62,13 +62,42 @@ class HfRepoSummary {
   /// Many repos do not (`Phi-3.5-mini-instruct-gguf` says `mini`), so this is
   /// nullable and the chip is simply omitted rather than guessed at.
   String? get paramLabel {
+    final size = _params;
+    if (size == null) return null;
+    return size.unit == 'B' ? '${size.value}B' : '${size.value}M';
+  }
+
+  /// The parameter count in billions, when the repo name states one. `360M`
+  /// becomes `0.36`.
+  ///
+  /// Null means the name says nothing, not that the model is small — the
+  /// catalog treats the two differently.
+  double? get paramsInBillions {
+    final size = _params;
+    if (size == null) return null;
+    final value = double.tryParse(size.value);
+    if (value == null) return null;
+    return size.unit == 'B' ? value : value / 1000;
+  }
+
+  /// Whether the name is a mixture-of-experts one of the `8x7B` form.
+  ///
+  /// The number after the `x` is the expert size, not the model: `Mixtral-8x7B`
+  /// holds 47B parameters. [paramsInBillions] cannot say how many without
+  /// knowing the architecture, so it reports null — and callers that filter on
+  /// size must check this too, since null otherwise means *unstated*.
+  bool get isMixtureOfExperts =>
+      RegExp(r'\dx\d', caseSensitive: false).hasMatch(name);
+
+  /// The parameter count as written in the name, or null when it is unstated.
+  ({String value, String unit})? get _params {
+    if (isMixtureOfExperts) return null;
     final match = RegExp(r'(?<![\w.])(\d+(?:\.\d+)?)\s*([BbMm])(?![\w])')
         .firstMatch(name);
-    if (match == null) return null;
-    final size = match.group(1);
-    final unit = match.group(2)?.toUpperCase();
-    if (size == null || unit == null) return null;
-    return '$size$unit';
+    final value = match?.group(1);
+    final unit = match?.group(2)?.toUpperCase();
+    if (value == null || unit == null) return null;
+    return (value: value, unit: unit);
   }
 
   @override

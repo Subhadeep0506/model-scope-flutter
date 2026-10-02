@@ -2,6 +2,7 @@ import 'package:checks/checks.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:model_scope_flutter/config/di/view_models.dart';
+import 'package:model_scope_flutter/data/models/app_settings.dart';
 import 'package:model_scope_flutter/data/models/chat_message.dart';
 import 'package:model_scope_flutter/data/models/chat_session.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
@@ -19,6 +20,7 @@ void main() {
   late FakeSessionRepository sessions;
   late FakeSettingsRepository settings;
   late FakeModelLibraryRepository library;
+  late FakeAppSettingsRepository runtime;
   late ProviderContainer container;
 
   /// Builds a container whose only session is [seed].
@@ -29,6 +31,7 @@ void main() {
     ChatSession seed, {
     SamplerSettings? sampler,
     List<ModelDescriptor>? models,
+    AppSettings? appSettings,
   }) {
     llm = FakeLlmService();
     sessions = FakeSessionRepository(<ChatSession>[seed]);
@@ -36,12 +39,14 @@ void main() {
     library = FakeModelLibraryRepository.of(
       models ?? <ModelDescriptor>[fakeInstalledModel()],
     );
+    runtime = FakeAppSettingsRepository(appSettings ?? const AppSettings());
     return ProviderContainer.test(
       overrides: fakeOverrides(
         llm: llm,
         sessions: sessions,
         settings: settings,
         library: library,
+        appSettings: runtime,
       ),
     );
   }
@@ -96,6 +101,86 @@ void main() {
     final last = stateOf(container).messages.last;
     check(last.error).isNotNull();
     check(stateOf(container).status).equals(ChatStatus.ready);
+  });
+
+  test('a refused GPU load is retried on the CPU', () async {
+    // Arrange — a driver that will not allocate, which is a load-time failure
+    // rather than a broken model.
+    final seed = sessionWith();
+    container = containerWith(seed);
+    llm.loadFailure = (runtime) =>
+        runtime.useGpu ? StateError('vulkan: out of device memory') : null;
+
+    // Act
+    await notifierOf(container).open(seed.id);
+
+    // Assert — the chat works, and says so.
+    final state = stateOf(container);
+    check(state.status).equals(ChatStatus.ready);
+    check(state.notice).isNotNull();
+    check(llm.loadCalls).equals(2);
+    check(llm.runtimes.map((r) => r.useGpu)).deepEquals(<bool>[true, false]);
+  });
+
+  test('the CPU fallback is not written back to settings', () async {
+    // Arrange — a later run, or a different model, deserves another attempt at
+    // the GPU rather than being quietly demoted forever.
+    final seed = sessionWith();
+    container = containerWith(seed);
+    llm.loadFailure = (runtime) =>
+        runtime.useGpu ? StateError('vulkan: out of device memory') : null;
+
+    // Act
+    await notifierOf(container).open(seed.id);
+
+    // Assert
+    check(runtime.saveCalls).equals(0);
+    check(runtime.stored.useGpu).isTrue();
+  });
+
+  test(
+    'a load that fails both ways is not called a generation failure',
+    () async {
+      // Arrange — a corrupt file fails with or without the GPU.
+      final seed = sessionWith();
+      container = containerWith(seed);
+      llm.loadFailure = (_) => const ModelLoadException(
+        name: 'SmolLM2 360M Instruct',
+        path: '/cache/smollm2-360m-instruct-q8_0.gguf',
+        contextLength: 4096,
+        useGpu: true,
+        sizeOnDisk: 120,
+        expectedSize: 418 * 1000 * 1000,
+        cause: '',
+      );
+
+      // Act
+      await notifierOf(container).open(seed.id);
+
+      // Assert — nothing was generated, so the old `Generation failed:` prefix
+      // would have sent the user looking in the wrong place.
+      final state = stateOf(container);
+      check(state.status).equals(ChatStatus.failed);
+      check(state.error).isNotNull().not((it) => it.startsWith('Generation'));
+      check(state.notice).isNull();
+    },
+  );
+
+  test('the fallback is skipped when the GPU is already off', () async {
+    // Arrange — nothing to drop, so a failure is final.
+    final seed = sessionWith();
+    container = containerWith(
+      seed,
+      appSettings: const AppSettings(useGpu: false),
+    );
+    llm.loadFailure = (_) => StateError('unsupported gguf');
+
+    // Act
+    await notifierOf(container).open(seed.id);
+
+    // Assert
+    check(stateOf(container).status).equals(ChatStatus.failed);
+    check(llm.loadCalls).equals(1);
   });
 
   test('open reports an empty library rather than loading nothing', () async {

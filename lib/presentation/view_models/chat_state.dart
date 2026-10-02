@@ -30,6 +30,7 @@ class ChatState {
     this.session,
     this.status = ChatStatus.idle,
     this.error,
+    this.notice,
     this.attachmentName,
   });
 
@@ -39,6 +40,11 @@ class ChatState {
   /// Set only for model-level failures, which replace the composer with an
   /// actionable card. Per-reply failures live on the message instead.
   final String? error;
+
+  /// A line about how the model loaded, when it did not load the way it was
+  /// asked to — currently only the CPU fallback. Unlike [error] the chat is
+  /// usable, so this is a caption beside the model strip rather than a card.
+  final String? notice;
 
   /// A picked file waiting in the composer. Recorded on the next message for
   /// display only — the model is text-only and never receives it.
@@ -71,13 +77,16 @@ class ChatState {
     ChatSession? session,
     ChatStatus? status,
     String? error,
+    String? notice,
     String? attachmentName,
     bool clearError = false,
+    bool clearNotice = false,
     bool clearAttachment = false,
   }) => ChatState(
     session: session ?? this.session,
     status: status ?? this.status,
     error: clearError ? null : (error ?? this.error),
+    notice: clearNotice ? null : (notice ?? this.notice),
     attachmentName: clearAttachment
         ? null
         : (attachmentName ?? this.attachmentName),

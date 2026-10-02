@@ -16,6 +16,8 @@ import 'llm_service.dart';
 class NobodyWhoLlmService implements LlmService {
   NobodyWhoLlmService();
 
+  static const String _logName = 'NobodyWhoLlmService';
+
   nobodywho.Chat? _chat;
   String? _loadedModelId;
 
@@ -31,25 +33,49 @@ class NobodyWhoLlmService implements LlmService {
     required SamplerSettings settings,
     required AppSettings runtime,
   }) async {
-    if (!await File(model.localPath).exists()) {
+    final file = File(model.localPath);
+    if (!await file.exists()) {
       throw ModelMissingException(name: model.name, path: model.localPath);
     }
 
     _chat = null;
     _loadedModelId = null;
-    _chat = await nobodywho.Chat.fromPath(
-      modelPath: model.localPath,
-      systemPrompt: settings.systemPrompt,
-      contextSize: runtime.contextLength,
-      threadCount: runtime.cpuThreads,
-      useGpu: runtime.useGpu,
-      sampler: _samplerFrom(settings),
-    );
+    try {
+      _chat = await nobodywho.Chat.fromPath(
+        modelPath: model.localPath,
+        systemPrompt: settings.systemPrompt,
+        contextSize: runtime.contextLength,
+        threadCount: runtime.cpuThreads,
+        useGpu: runtime.useGpu,
+        sampler: _samplerFrom(settings),
+      );
+    } catch (error) {
+      throw ModelLoadException(
+        name: model.name,
+        path: model.localPath,
+        contextLength: runtime.contextLength,
+        useGpu: runtime.useGpu,
+        sizeOnDisk: await _lengthOf(file),
+        expectedSize: model.sizeBytes,
+        cause: error,
+      );
+    }
     _loadedModelId = model.id;
     developer.log(
-      'Loaded ${model.name} from ${model.localPath}',
-      name: 'NobodyWhoLlmService',
+      'Loaded ${model.name} from ${model.localPath} '
+      '(context ${runtime.contextLength}, GPU ${runtime.useGpu})',
+      name: _logName,
     );
+  }
+
+  /// The file's length, or null when it cannot be read — this runs while an
+  /// error is already being built, so it must not raise one of its own.
+  static Future<int?> _lengthOf(File file) async {
+    try {
+      return await file.length();
+    } on FileSystemException {
+      return null;
+    }
   }
 
   @override

@@ -77,7 +77,9 @@ void main() {
         .isNotEmpty();
   });
 
-  testWidgets('delete removes the card and offers an undo', (tester) async {
+  testWidgets('delete asks first and cancelling keeps the session', (
+    tester,
+  ) async {
     // Arrange
     final repository = await pumpList(
       tester,
@@ -90,20 +92,36 @@ void main() {
     // Act
     await tester.tap(find.byTooltip('Delete Explain quantisation'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    // Assert — a transcript is unrecoverable, so nothing goes until confirmed.
+    check(tester.widgetList(find.byType(SessionCard))).length.equals(2);
+    check(repository.stored.map((s) => s.id).toList())
+        .unorderedEquals(<String>['a', 'b']);
+  });
+
+  testWidgets('confirming the dialog deletes the session', (tester) async {
+    // Arrange
+    final repository = await pumpList(
+      tester,
+      seed: <ChatSession>[
+        sessionWith(id: 'a', title: 'Explain quantisation'),
+        sessionWith(id: 'b', title: 'Draft a changelog'),
+      ],
+    );
+
+    // Act
+    await tester.tap(find.byTooltip('Delete Explain quantisation'));
+    await tester.pumpAndSettle();
+    check(find.text('Delete "Explain quantisation"?').evaluate()).isNotEmpty();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
 
     // Assert
     check(tester.widgetList(find.byType(SessionCard))).length.equals(1);
     check(repository.stored.map((s) => s.id).toList())
         .deepEquals(<String>['b']);
-
-    // Act — undo.
-    await tester.tap(find.text('Undo'));
-    await tester.pumpAndSettle();
-
-    // Assert
-    check(tester.widgetList(find.byType(SessionCard))).length.equals(2);
-    check(repository.stored.map((s) => s.id).toList())
-        .unorderedEquals(<String>['a', 'b']);
   });
 
   testWidgets('every interactive element carries a label', (tester) async {

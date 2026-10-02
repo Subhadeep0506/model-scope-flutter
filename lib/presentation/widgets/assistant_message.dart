@@ -5,10 +5,15 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/generation_metrics.dart';
+import '../../domain/services/thinking_parser.dart';
 import 'mono_label.dart';
 
 /// A reply: plain body text across the full content width, with the measured
 /// metrics and its two actions underneath.
+///
+/// A reasoning model wraps its working in `<think>` tags. That is stored
+/// verbatim on the message and split apart here, so the answer reads as the
+/// answer and the reasoning is available without burying it.
 class AssistantMessage extends StatelessWidget {
   const AssistantMessage({
     super.key,
@@ -26,24 +31,136 @@ class AssistantMessage extends StatelessWidget {
     final metrics = context.metrics;
     final failure = message.error;
     final stats = message.metrics;
+    final split = splitThinking(message.text);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (message.text.isNotEmpty)
-          Text(message.text, style: Theme.of(context).textTheme.bodyLarge),
-        if (message.isStreaming && message.text.isEmpty) const _Thinking(),
+        if (split.thinking.isNotEmpty) ...<Widget>[
+          _ThinkingBlock(
+            text: split.thinking,
+            // Held open while it is the only thing there is to watch.
+            isLive: split.isOpen && message.isStreaming,
+          ),
+          SizedBox(height: metrics.gapSm),
+        ],
+        if (split.answer.isNotEmpty)
+          Text(split.answer, style: Theme.of(context).textTheme.bodyLarge),
+        // Covers both the wait before the first token and the wait while the
+        // model is still inside a `<think>` block it has not closed.
+        if (message.isStreaming && split.answer.isEmpty)
+          const _StreamingIndicator(),
         if (failure != null) _Failure(message: failure),
         if (stats != null && !message.isStreaming) ...<Widget>[
           SizedBox(height: metrics.gapSm),
           _MetricsRow(
             stats: stats,
-            text: message.text,
+            // Copy puts the answer on the clipboard, not the reasoning.
+            text: split.answer,
             onRegenerate: onRegenerate,
           ),
         ],
       ],
+    );
+  }
+}
+
+/// A reasoning model's working, collapsed behind a one-line header.
+///
+/// Collapsed by default because it is usually several times longer than the
+/// answer, but expanded on its own while [isLive] so the model does not look
+/// stalled during a long think.
+class _ThinkingBlock extends StatefulWidget {
+  const _ThinkingBlock({required this.text, required this.isLive});
+
+  final String text;
+  final bool isLive;
+
+  @override
+  State<_ThinkingBlock> createState() => _ThinkingBlockState();
+}
+
+class _ThinkingBlockState extends State<_ThinkingBlock> {
+  bool? _chosen;
+
+  /// What the user asked for, or the live state until they ask for something.
+  bool get _expanded => _chosen ?? widget.isLive;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final metrics = context.metrics;
+    final label = widget.isLive ? 'Thinking…' : 'Thought process';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          label: '$label, ${_expanded ? 'hide' : 'show'}',
+          child: InkWell(
+            onTap: () => setState(() => _chosen = !_expanded),
+            borderRadius: metrics.controlShape,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: metrics.gapXs),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.psychology_outlined,
+                    size: 16,
+                    color: palette.muted,
+                  ),
+                  SizedBox(width: metrics.gapXs),
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.muted),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 16,
+                    color: palette.muted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_expanded) _ThoughtText(text: widget.text),
+      ],
+    );
+  }
+}
+
+/// The reasoning itself: indented behind a rule, italic and muted, so it never
+/// reads as the model's answer.
+class _ThoughtText extends StatelessWidget {
+  const _ThoughtText({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final metrics = context.metrics;
+
+    return Container(
+      margin: EdgeInsets.only(top: metrics.gapXs),
+      padding: EdgeInsets.only(left: metrics.gapMd),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: palette.outline)),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: palette.muted, fontStyle: FontStyle.italic),
+      ),
     );
   }
 }
@@ -110,8 +227,8 @@ class _MetricAction extends StatelessWidget {
   );
 }
 
-class _Thinking extends StatelessWidget {
-  const _Thinking();
+class _StreamingIndicator extends StatelessWidget {
+  const _StreamingIndicator();
 
   @override
   Widget build(BuildContext context) => Semantics(

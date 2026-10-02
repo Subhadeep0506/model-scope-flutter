@@ -65,17 +65,37 @@ class SheetScaffold extends StatelessWidget {
 
   /// Opens [child] with the scrim, shape and background the mockups use.
   static Future<T?> show<T>(BuildContext context, Widget child) {
-    final metrics = context.metrics;
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
+      // Keeps the sheet out of the system bars' space, and the
+      // `SafeArea(top: false)` inside handles the gesture bar.
+      useSafeArea: true,
       backgroundColor: context.palette.canvas,
       barrierColor: AppPalette.scrim,
-      shape: RoundedRectangleBorder(borderRadius: metrics.sheetShape),
+      shape: RoundedRectangleBorder(borderRadius: context.metrics.sheetShape),
       constraints: const BoxConstraints(maxWidth: 640),
-      builder: (_) => child,
+      builder: _capped(child),
     );
   }
+
+  /// Bounds [child]'s height, which `isScrollControlled: true` otherwise leaves
+  /// free: a sheet with a scrolling body grows until its title sits under the
+  /// status bar, and `useSafeArea` alone does not stop that.
+  ///
+  /// The window is measured from the sheet's own context rather than the
+  /// opener's. The two can disagree — the widget that opens a sheet may sit
+  /// under a `MediaQuery` of its own — and the height that bounds a sheet is
+  /// the window's.
+  static WidgetBuilder _capped(Widget child) =>
+      (BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight:
+              MediaQuery.sizeOf(context).height *
+              context.metrics.sheetMaxHeightFactor,
+        ),
+        child: child,
+      );
 }
 
 class _SheetHeader extends StatelessWidget {

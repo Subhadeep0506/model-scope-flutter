@@ -35,11 +35,6 @@ class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
     await _write(_current.where((s) => s.id != id).toList());
   }
 
-  /// Puts a deleted session back, used by the undo action.
-  Future<void> restore(ChatSession session) async {
-    await _write(<ChatSession>[session, ..._current]);
-  }
-
   /// Replaces a session in place, or appends it if it is not in the list.
   Future<void> upsert(ChatSession session) async {
     final next = _current.where((s) => s.id != session.id).toList()

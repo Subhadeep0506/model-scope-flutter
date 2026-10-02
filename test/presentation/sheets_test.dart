@@ -7,6 +7,7 @@ import 'package:model_scope_flutter/domain/services/attachment_picker.dart';
 import 'package:model_scope_flutter/presentation/widgets/attach_sheet.dart';
 import 'package:model_scope_flutter/presentation/widgets/loaded_models_sheet.dart';
 import 'package:model_scope_flutter/presentation/widgets/sampling_sheet.dart';
+import 'package:model_scope_flutter/presentation/widgets/sheet_scaffold.dart';
 
 import '../support/fakes.dart';
 
@@ -167,7 +168,9 @@ void main() {
         settings: settings,
       );
 
-      // Act
+      // Act — five sliders and the prompt field put the button below the fold
+      // of the capped sheet, so it has to be scrolled to before it can be hit.
+      await tester.ensureVisible(find.text('Reset to defaults'));
       await tester.tap(find.text('Reset to defaults'));
       await tester.pumpAndSettle();
 
@@ -219,6 +222,38 @@ void main() {
 
       // Assert
       check(tester.takeException()).isNull();
+    });
+  });
+
+  group('sheet height', () {
+    testWidgets('a tall sheet stops short of the top of the window', (
+      tester,
+    ) async {
+      // Arrange — a phone-shaped window, where the status bar is the thing a
+      // full-height sheet runs under.
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      // Act — Sampling is the tallest of the sheets with a scrolling body.
+      await openSheet(tester, (context) => SamplingSheet.show(context));
+
+      // Assert — the title row has to clear the system bars, so the sheet is
+      // capped rather than grown to its content.
+      final height = tester.getSize(find.byType(SheetScaffold)).height;
+      final window =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      check(height).isLessOrEqual(window * 0.85);
+      check(find.text('Sampling').evaluate()).isNotEmpty();
+    });
+
+    testWidgets('a short sheet is left at its own height', (tester) async {
+      // Act — Attach is two cards and nothing else.
+      await openSheet(tester, (context) => AttachSheet.show(context));
+
+      // Assert — the cap bounds a sheet, it does not stretch one.
+      final height = tester.getSize(find.byType(SheetScaffold)).height;
+      check(height).isLessThan(tester.view.physicalSize.height / 2);
     });
   });
 }

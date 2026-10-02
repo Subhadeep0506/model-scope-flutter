@@ -10,9 +10,9 @@ transcript, and three modal sheets (Loaded models, Sampling, Attach).
 ## What this part does
 
 - **Chat tab is real.** Multi-session list with search and model/date filters, create and
-  delete with undo, a streaming transcript, and the three sheets. Sessions persist to a JSON
-  file in the application-documents directory and are restored into the model's context when
-  a session is reopened.
+  delete behind a confirmation, a streaming transcript, and the three sheets. Sessions persist
+  to shared preferences and are replayed into the model's context when a session is reopened,
+  up to the number of turns set by `CHAT_MEMORY` in the Sampling sheet.
 - **Home, Agent and Settings are stubs.** They exist so the bottom navigation matches the
   design; each renders a placeholder.
 - **Tool calling is not in this part.** Deferred to a later pass.

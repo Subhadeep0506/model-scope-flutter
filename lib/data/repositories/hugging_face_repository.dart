@@ -28,6 +28,24 @@ abstract interface class HuggingFaceRepository {
 class HfHuggingFaceRepository implements HuggingFaceRepository {
   HfHuggingFaceRepository(this._client, this._token);
 
+  /// The largest model this app offers to download.
+  ///
+  /// The device runs inference on its own CPU or GPU, and anything above this
+  /// either will not load or answers too slowly to judge the package by. The
+  /// Hub has no parameter filter, so it is applied here.
+  static const double maxParamsInBillions = 4;
+
+  /// How many results a page should carry before it is handed back.
+  ///
+  /// Filtering client-side means an upstream page of twenty can yield two
+  /// rows, which reads as a list that has stopped loading, so [search] keeps
+  /// asking until it has roughly half a screen.
+  static const int _minVisible = 10;
+
+  /// How many upstream requests one [search] may make. The Hub rate-limits
+  /// unauthenticated clients hard, so chasing pages has to stop somewhere.
+  static const int _maxFetches = 5;
+
   final HfApiClient _client;
 
   /// Reads the stored Hugging Face token at call time rather than holding a
@@ -41,12 +59,39 @@ class HfHuggingFaceRepository implements HuggingFaceRepository {
     required CatalogSort sort,
     required String query,
     String? cursor,
-  }) async => _client.listModels(
-    sort: sort,
-    query: query,
-    cursor: cursor,
-    token: await _token(),
-  );
+  }) async {
+    final token = await _token();
+    final items = <HfRepoSummary>[];
+    var next = cursor;
+
+    for (var fetch = 0; fetch < _maxFetches; fetch++) {
+      final page = await _client.listModels(
+        sort: sort,
+        query: query,
+        cursor: next,
+        token: token,
+      );
+      items.addAll(page.items.where(_isSmallEnough));
+      next = page.nextCursor;
+      if (next == null || items.length >= _minVisible) break;
+    }
+
+    return HfRepoPage(items: items, nextCursor: next);
+  }
+
+  /// Keeps a repo whose name states no size.
+  ///
+  /// Plenty of small models never say (`Phi-3.5-mini-instruct-gguf` says
+  /// `mini`), and hiding those would cost more than letting the occasional
+  /// large one through — the size is on every quant chip either way.
+  ///
+  /// A mixture-of-experts name is the exception: `Mixtral-8x7B` states no total
+  /// it can be read from, but `8x` of anything is past the cap regardless.
+  static bool _isSmallEnough(HfRepoSummary repo) {
+    if (repo.isMixtureOfExperts) return false;
+    final params = repo.paramsInBillions;
+    return params == null || params <= maxParamsInBillions;
+  }
 
   @override
   Future<List<GgufFile>> filesOf(String repoId) async {

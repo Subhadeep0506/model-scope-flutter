@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/api_keys.dart';
 import '../../data/models/model_descriptor.dart';
@@ -13,6 +14,7 @@ import '../../data/repositories/local_model_library_repository.dart';
 import '../../data/repositories/local_session_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/model_library_repository.dart';
+import '../../data/repositories/prefs_session_repository.dart';
 import '../../data/repositories/session_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/sources/hf_api_client.dart';
@@ -37,6 +39,15 @@ final documentsDirectoryProvider = Provider<Directory>(
   ),
 );
 
+/// Shared preferences, read and written on demand.
+///
+/// Unlike [documentsDirectoryProvider] this needs no override in `main()` —
+/// [SharedPreferencesAsync] has no instance to prime. Tests swap the platform
+/// implementation instead.
+final sharedPreferencesProvider = Provider<SharedPreferencesAsync>(
+  (ref) => SharedPreferencesAsync(),
+);
+
 final sessionStoreProvider = Provider<JsonFileStore>(
   (ref) => JsonFileStore(
     directory: ref.watch(documentsDirectoryProvider),
@@ -58,8 +69,14 @@ final modelStoreProvider = Provider<JsonFileStore>(
   ),
 );
 
+/// Sessions live in shared preferences, with the old `sessions.json` store
+/// passed in as the one-shot migration source for upgrades from the build that
+/// wrote it. The file is read, never deleted, so a bad import is recoverable.
 final sessionRepositoryProvider = Provider<SessionRepository>(
-  (ref) => LocalSessionRepository(ref.watch(sessionStoreProvider)),
+  (ref) => PrefsSessionRepository(
+    ref.watch(sharedPreferencesProvider),
+    LocalSessionRepository(ref.watch(sessionStoreProvider)),
+  ),
 );
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(

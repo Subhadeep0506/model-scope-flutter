@@ -19,6 +19,7 @@ void main() {
       check(settings.topP).equals(0.90);
       check(settings.topK).equals(40);
       check(settings.maxTokens).equals(512);
+      check(settings.historyTurns).equals(10);
       check(settings.systemPrompt).isNotEmpty();
     });
 
@@ -29,6 +30,7 @@ void main() {
         topP: 0.55,
         topK: 12,
         maxTokens: 2048,
+        historyTurns: 4,
         systemPrompt: 'Answer in one sentence.',
       );
 
@@ -49,6 +51,7 @@ void main() {
         'top_p',
         'top_k',
         'max_tokens',
+        'history_turns',
         'system_prompt',
       ]);
     });

@@ -49,6 +49,12 @@ class FakeLlmService implements LlmService {
   /// Thrown instead of streaming, to exercise the failure path.
   Object? failure;
 
+  /// Thrown by [load] instead of loading, or null to let it succeed.
+  ///
+  /// Takes the runtime settings so a test can refuse one configuration and
+  /// accept another — which is how the GPU-to-CPU fallback is exercised.
+  Object? Function(AppSettings runtime)? loadFailure;
+
   /// Set to hold [load] open, so the `preparing` state can be observed.
   Completer<void>? loadGate;
 
@@ -83,6 +89,10 @@ class FakeLlmService implements LlmService {
     applied.add(settings);
     runtimes.add(runtime);
     await loadGate?.future;
+
+    final refusal = loadFailure?.call(runtime);
+    if (refusal != null) throw refusal;
+
     _loaded = true;
     _loadedModelId = model.id;
   }

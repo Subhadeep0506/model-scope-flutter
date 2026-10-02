@@ -170,8 +170,8 @@ class _ModelList extends ConsumerWidget {
     );
   }
 
-  /// Deleting weights means re-downloading gigabytes, so it asks first — unlike
-  /// session deletion, which offers an undo instead.
+  /// Deleting weights means re-downloading gigabytes, so it asks first — the
+  /// same dialog the Chats list uses before deleting a session.
   Future<void> _confirmRemove(
     BuildContext context,
     WidgetRef ref,
