@@ -9,6 +9,7 @@ import '../../data/models/api_keys.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/repositories/api_key_repository.dart';
 import '../../data/repositories/app_settings_repository.dart';
+import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/hugging_face_repository.dart';
 import '../../data/repositories/local_model_library_repository.dart';
 import '../../data/repositories/local_session_repository.dart';
@@ -22,10 +23,10 @@ import '../../data/sources/json_file_store.dart';
 import '../../data/sources/secure_key_store.dart';
 import '../../domain/services/app_cache_service.dart';
 import '../../domain/services/attachment_picker.dart';
+import '../../domain/services/background_model_downloader.dart';
 import '../../domain/services/llm_service.dart';
 import '../../domain/services/model_downloader.dart';
 import '../../domain/services/nobodywho_llm_service.dart';
-import '../../domain/services/nobodywho_model_downloader.dart';
 import '../router/app_router.dart';
 import 'view_models.dart';
 
@@ -110,7 +111,12 @@ final hfApiClientProvider = Provider<HfApiClient>(
   (ref) => HfApiClient(ref.watch(httpClientProvider)),
 );
 
-/// The Hugging Face catalog.
+/// The models this build offers, read from the manifest it ships with.
+final catalogRepositoryProvider = Provider<CatalogRepository>(
+  (ref) => AssetCatalogRepository(),
+);
+
+/// What Hugging Face is asked about a repository the catalog already names.
 ///
 /// The token is read per request rather than captured, so pasting one into the
 /// API keys card takes effect on the next call without rebuilding anything.
@@ -121,9 +127,15 @@ final huggingFaceRepositoryProvider = Provider<HuggingFaceRepository>(
   ),
 );
 
-final modelDownloaderProvider = Provider<ModelDownloader>(
-  (ref) => const NobodyWhoModelDownloader(),
-);
+/// Transfers, owned by the platform rather than by this process.
+///
+/// Disposed with the scope so the update subscription does not outlive it;
+/// the downloads themselves carry on regardless, which is the point.
+final modelDownloaderProvider = Provider<ModelDownloader>((ref) {
+  final downloader = BackgroundModelDownloader();
+  ref.onDispose(downloader.dispose);
+  return downloader;
+});
 
 final appCacheServiceProvider = Provider<AppCacheService>(
   (ref) => AppCacheService(ref.watch(documentsDirectoryProvider)),
@@ -136,6 +148,16 @@ final appCacheServiceProvider = Provider<AppCacheService>(
 final activeModelProvider = Provider<ModelDescriptor?>(
   (ref) => ref.watch(modelLibraryViewModelProvider).value?.active,
 );
+
+/// Whether the library already holds a quant from this repository.
+///
+/// Drives the `Installed` badge on a catalog card. Deliberately per-repository
+/// rather than per-file: the badge answers "do I already have this model?",
+/// which a different quant of the same weights satisfies.
+final isRepoInstalledProvider = Provider.family<bool, String>((ref, repoId) {
+  final library = ref.watch(modelLibraryViewModelProvider).value;
+  return library?.models.any((model) => model.repoId == repoId) ?? false;
+});
 
 /// Looks up an installed model by id, for rows that name the model a session
 /// was recorded against. Returns null once that model has been removed.

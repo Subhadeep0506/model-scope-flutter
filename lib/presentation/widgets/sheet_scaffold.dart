@@ -10,8 +10,12 @@ import 'square_icon_button.dart';
 /// The body scrolls so the sheet still works at large system text scales and
 /// lifts clear of the keyboard when a field inside it has focus.
 class SheetScaffold extends StatelessWidget {
-  const SheetScaffold({super.key, required this.title, required this.children})
-    : body = null;
+  const SheetScaffold({
+    super.key,
+    required this.title,
+    required this.children,
+    this.titleAlign = TextAlign.center,
+  }) : body = null;
 
   /// For a sheet whose body scrolls itself — a lazy list, say — rather than
   /// one short enough to sit in a [SingleChildScrollView].
@@ -19,11 +23,16 @@ class SheetScaffold extends StatelessWidget {
     super.key,
     required this.title,
     required Widget this.body,
+    this.titleAlign = TextAlign.center,
   }) : children = const <Widget>[];
 
   final String title;
   final List<Widget> children;
   final Widget? body;
+
+  /// Centred for the short titles — `Sampling`, `Attach` — and left for the
+  /// model sheet, whose title is a model name long enough to wrap.
+  final TextAlign titleAlign;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +48,7 @@ class SheetScaffold extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _SheetHeader(title: title),
+            _SheetHeader(title: title, align: titleAlign),
             Flexible(
               child:
                   custom ??
@@ -99,9 +108,10 @@ class SheetScaffold extends StatelessWidget {
 }
 
 class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({required this.title});
+  const _SheetHeader({required this.title, required this.align});
 
   final String title;
+  final TextAlign align;
 
   @override
   Widget build(BuildContext context) {
@@ -117,12 +127,13 @@ class _SheetHeader extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          // Balances the close button so the title sits centred in the sheet.
-          const SizedBox(width: 32),
+          // Balances the close button so a centred title really does sit in
+          // the middle of the sheet. A left-aligned one wants the width back.
+          if (align == TextAlign.center) const SizedBox(width: 32),
           Expanded(
             child: Text(
               title,
-              textAlign: TextAlign.center,
+              textAlign: align,
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),

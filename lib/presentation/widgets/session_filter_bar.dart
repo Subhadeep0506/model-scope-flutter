@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/di/view_models.dart';
 import '../../config/theme/app_metrics.dart';
-import '../../config/theme/app_palette.dart';
 import '../../data/models/model_descriptor.dart';
 import '../view_models/session_filter_view_model.dart';
 import 'filter_dropdown.dart';
+import 'search_field.dart';
 import 'section_card.dart';
 
 /// Search field plus the model and time dropdowns, bound straight to
@@ -38,7 +38,11 @@ class _SessionFilterBarState extends ConsumerState<SessionFilterBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          _SearchField(controller: _search, onChanged: notifier.setQuery),
+          SearchField(
+            controller: _search,
+            hintText: 'Search sessions',
+            onChanged: notifier.setQuery,
+          ),
           SizedBox(height: metrics.gapMd),
           Row(
             children: <Widget>[
@@ -84,46 +88,4 @@ class _SessionFilterBarState extends ConsumerState<SessionFilterBar> {
         for (final time in SessionTimeFilter.values)
           (value: time, label: time.label),
       ];
-}
-
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    final metrics = context.metrics;
-
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      style: Theme.of(context).textTheme.bodyMedium,
-      decoration: InputDecoration(
-        hintText: 'Search sessions',
-        fillColor: palette.fieldFill,
-        prefixIcon: Icon(Icons.search_rounded, size: 20, color: palette.muted),
-        prefixIconConstraints: const BoxConstraints(minWidth: 40),
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(vertical: metrics.gapMd),
-        // The search field reads as a soft fill with no hairline in the
-        // mockup, unlike the outlined fields elsewhere.
-        border: OutlineInputBorder(
-          borderRadius: metrics.controlShape,
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: metrics.controlShape,
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: metrics.controlShape,
-          borderSide: BorderSide(color: palette.primary, width: 1.5),
-        ),
-      ),
-    );
-  }
 }

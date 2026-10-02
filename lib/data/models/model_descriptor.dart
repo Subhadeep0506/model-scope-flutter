@@ -1,8 +1,8 @@
 import 'package:json_annotation/json_annotation.dart';
 
 import 'byte_size.dart';
+import 'catalog_model.dart';
 import 'gguf_file.dart';
-import 'hf_repo_summary.dart';
 
 part 'model_descriptor.g.dart';
 
@@ -29,20 +29,24 @@ class ModelDescriptor {
       _$ModelDescriptorFromJson(json);
 
   /// Builds an entry from the catalog row and file the user downloaded.
+  ///
+  /// The name and parameter count are authored in the manifest rather than
+  /// derived from the repository name, so an installed model is titled exactly
+  /// as the catalog titled it.
   factory ModelDescriptor.installed({
-    required HfRepoSummary repo,
+    required CatalogModel model,
     required GgufFile file,
     required String localPath,
     DateTime? at,
   }) => ModelDescriptor(
-    repoId: repo.id,
+    repoId: model.repoId,
     fileName: file.fileName,
-    name: repo.displayName,
+    name: model.name,
     quantization: file.quantization,
     sizeBytes: file.sizeBytes,
     localPath: localPath,
     installedAt: at ?? DateTime.now(),
-    paramLabel: repo.paramLabel,
+    paramLabel: model.paramLabel,
   );
 
   /// `bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF`, shown in mono under the
@@ -60,11 +64,12 @@ class ModelDescriptor {
 
   final int sizeBytes;
 
-  /// Absolute path to the weights on disk, as returned by the downloader.
+  /// Absolute path to the weights on disk, as reported by the downloader.
   ///
-  /// This is inside `nobodywho`'s own model cache rather than a directory the
-  /// app owns, so it is stored rather than derived — and re-checked on load,
-  /// because a cache wipe outside the app would leave it dangling.
+  /// Stored rather than derived, and re-checked on load. Models downloaded by
+  /// this build land under the app's support directory, but entries written by
+  /// earlier builds point into `nobodywho`'s own cache and keep working — which
+  /// is exactly why the path is recorded instead of being rebuilt from the id.
   final String localPath;
 
   final DateTime installedAt;

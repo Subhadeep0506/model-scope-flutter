@@ -2,17 +2,16 @@ import '../models/gguf_file.dart';
 import '../models/hf_repo_summary.dart';
 import '../sources/hf_api_client.dart';
 
-/// The app's view of the Hugging Face catalog.
+/// What the app asks Hugging Face about a repository it already knows of.
+///
+/// There is no search: the list of models comes from the shipped catalog, so
+/// the Hub is only consulted for the two things that cannot be shipped — live
+/// stats, and the files available to download.
 abstract interface class HuggingFaceRepository {
-  /// One page of GGUF repositories. Pass a previous page's `nextCursor` to go
-  /// on; pass null for the first page.
-  Future<HfRepoPage> search({
-    required CatalogSort sort,
-    required String query,
-    String? cursor,
-  });
+  /// Downloads, likes and file count for [repoId].
+  Future<HfRepoSummary> detailsOf(String repoId);
 
-  /// The downloadable quants in [repoId].
+  /// The `.gguf` files in [repoId], weights first.
   Future<List<GgufFile>> filesOf(String repoId);
 
   /// The account name a token belongs to, for the Verify button.
@@ -21,30 +20,12 @@ abstract interface class HuggingFaceRepository {
 
 /// [HuggingFaceRepository] over the Hub REST API.
 ///
-/// Holds a per-repository file cache. The browse sheet resolves quant chips
-/// lazily, one call per card as it scrolls into view, so a user scrolling back
-/// and forth would otherwise re-request the same trees and walk straight into
-/// the Hub's rate limit.
+/// Both lookups are memoised per repository. Riverpod caches them a second time
+/// at the provider level, but keeping the cache here as well means the catalog
+/// and the model sheet cannot ask twice for the same thing across a provider
+/// rebuild — the Hub rate-limits unauthenticated clients hard.
 class HfHuggingFaceRepository implements HuggingFaceRepository {
   HfHuggingFaceRepository(this._client, this._token);
-
-  /// The largest model this app offers to download.
-  ///
-  /// The device runs inference on its own CPU or GPU, and anything above this
-  /// either will not load or answers too slowly to judge the package by. The
-  /// Hub has no parameter filter, so it is applied here.
-  static const double maxParamsInBillions = 4;
-
-  /// How many results a page should carry before it is handed back.
-  ///
-  /// Filtering client-side means an upstream page of twenty can yield two
-  /// rows, which reads as a list that has stopped loading, so [search] keeps
-  /// asking until it has roughly half a screen.
-  static const int _minVisible = 10;
-
-  /// How many upstream requests one [search] may make. The Hub rate-limits
-  /// unauthenticated clients hard, so chasing pages has to stop somewhere.
-  static const int _maxFetches = 5;
 
   final HfApiClient _client;
 
@@ -52,57 +33,42 @@ class HfHuggingFaceRepository implements HuggingFaceRepository {
   /// copy, so a key typed into Settings takes effect on the next request.
   final Future<String?> Function() _token;
 
-  final Map<String, List<GgufFile>> _files = <String, List<GgufFile>>{};
+  final Map<String, Future<HfRepoSummary>> _details =
+      <String, Future<HfRepoSummary>>{};
+  final Map<String, Future<List<GgufFile>>> _files =
+      <String, Future<List<GgufFile>>>{};
 
   @override
-  Future<HfRepoPage> search({
-    required CatalogSort sort,
-    required String query,
-    String? cursor,
-  }) async {
-    final token = await _token();
-    final items = <HfRepoSummary>[];
-    var next = cursor;
-
-    for (var fetch = 0; fetch < _maxFetches; fetch++) {
-      final page = await _client.listModels(
-        sort: sort,
-        query: query,
-        cursor: next,
-        token: token,
-      );
-      items.addAll(page.items.where(_isSmallEnough));
-      next = page.nextCursor;
-      if (next == null || items.length >= _minVisible) break;
-    }
-
-    return HfRepoPage(items: items, nextCursor: next);
-  }
-
-  /// Keeps a repo whose name states no size.
-  ///
-  /// Plenty of small models never say (`Phi-3.5-mini-instruct-gguf` says
-  /// `mini`), and hiding those would cost more than letting the occasional
-  /// large one through — the size is on every quant chip either way.
-  ///
-  /// A mixture-of-experts name is the exception: `Mixtral-8x7B` states no total
-  /// it can be read from, but `8x` of anything is past the cap regardless.
-  static bool _isSmallEnough(HfRepoSummary repo) {
-    if (repo.isMixtureOfExperts) return false;
-    final params = repo.paramsInBillions;
-    return params == null || params <= maxParamsInBillions;
-  }
+  Future<HfRepoSummary> detailsOf(String repoId) => _details[repoId] ??= _guard(
+    _details,
+    repoId,
+    () async => _client.repoDetails(repoId, token: await _token()),
+  );
 
   @override
-  Future<List<GgufFile>> filesOf(String repoId) async {
-    final cached = _files[repoId];
-    if (cached != null) return cached;
-
-    final files = await _client.listFiles(repoId, token: await _token());
-    _files[repoId] = files;
-    return files;
-  }
+  Future<List<GgufFile>> filesOf(String repoId) => _files[repoId] ??= _guard(
+    _files,
+    repoId,
+    () async => _client.listFiles(repoId, token: await _token()),
+  );
 
   @override
   Future<String> verifyToken(String token) => _client.whoami(token);
+
+  /// Caches the in-flight future so two cards asking at once share one request,
+  /// but drops it again on failure — otherwise a single rate-limited response
+  /// would be remembered as this repository's answer for the rest of the run,
+  /// and the user's Retry button could never succeed.
+  Future<T> _guard<T>(
+    Map<String, Future<T>> cache,
+    String key,
+    Future<T> Function() request,
+  ) async {
+    try {
+      return await request();
+    } catch (_) {
+      cache.remove(key);
+      rethrow;
+    }
+  }
 }

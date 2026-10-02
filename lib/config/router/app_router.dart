@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../presentation/screens/app_shell.dart';
 import '../../presentation/screens/chat_screen.dart';
+import '../../presentation/screens/model_catalog_screen.dart';
 import '../../presentation/screens/placeholder_screen.dart';
 import '../../presentation/screens/sessions_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
@@ -17,6 +18,11 @@ abstract final class Routes {
   /// Full-screen transcript, deliberately outside the shell so it covers the
   /// navigation bar — see `assets/design/chat-messages.png`.
   static const String session = '/chat/session/:id';
+
+  /// The model catalog, nested under Settings so the navigation bar stays put
+  /// and back returns to Settings — see
+  /// `assets/design/settings-browse-models-list.png`.
+  static const String catalog = '/settings/catalog';
 
   static String sessionOf(String id) => '/chat/session/$id';
 }
@@ -61,12 +67,31 @@ GoRouter createRouter() => GoRouter(
         _branch(Routes.home, const PlaceholderScreen(title: 'Home')),
         _branch(Routes.chat, const SessionsScreen()),
         _branch(Routes.agent, const PlaceholderScreen(title: 'Agent')),
-        _branch(Routes.settings, const SettingsScreen()),
+        _branch(
+          Routes.settings,
+          const SettingsScreen(),
+          routes: <RouteBase>[
+            GoRoute(
+              path: 'catalog',
+              builder: (_, _) => const ModelCatalogScreen(),
+            ),
+          ],
+        ),
       ],
     ),
   ],
 );
 
-StatefulShellBranch _branch(String path, Widget child) => StatefulShellBranch(
-  routes: <RouteBase>[GoRoute(path: path, builder: (_, _) => child)],
+/// One tab, with any screens pushed on top of it.
+///
+/// Sub-routes are relative paths and nest inside the branch, so pushing one
+/// keeps the navigation bar on screen and leaves the other tabs' stacks alone.
+StatefulShellBranch _branch(
+  String path,
+  Widget child, {
+  List<RouteBase> routes = const <RouteBase>[],
+}) => StatefulShellBranch(
+  routes: <RouteBase>[
+    GoRoute(path: path, builder: (_, _) => child, routes: routes),
+  ],
 );

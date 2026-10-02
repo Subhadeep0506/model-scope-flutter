@@ -1,52 +1,55 @@
-import '../../data/models/hf_repo_summary.dart';
-import '../../data/sources/hf_api_client.dart';
+import '../../data/models/catalog_model.dart';
 
-/// What the Hugging Face · GGUF sheet is showing.
+/// What the Model catalog screen is showing.
 ///
-/// Pages accumulate into [repos]; [nextCursor] is the opaque token the Hub
-/// hands back in its `Link` header, and a null one means the end of the list.
+/// The whole catalog is held here, with the search text and capability filter
+/// applied on read. There is no paging and no cursor: the list ships with the
+/// app, so narrowing it is a list operation rather than a request.
 class CatalogState {
   const CatalogState({
-    this.repos = const <HfRepoSummary>[],
-    this.sort = CatalogSort.downloads,
+    this.models = const <CatalogModel>[],
     this.query = '',
-    this.nextCursor,
-    this.isLoadingMore = false,
-    this.loadMoreError,
+    this.capability,
   });
 
-  final List<HfRepoSummary> repos;
-  final CatalogSort sort;
+  final List<CatalogModel> models;
   final String query;
-  final String? nextCursor;
 
-  /// True while a further page is in flight, so the list can show one spinner
-  /// at the bottom instead of replacing everything with a loading state.
-  final bool isLoadingMore;
+  /// The selected filter chip, or null for `All`.
+  final ModelCapability? capability;
 
-  /// Set when fetching a further page failed. The already-loaded repos stay on
-  /// screen; only the footer changes to a retry.
-  final String? loadMoreError;
+  /// The rows to draw, after the search field and the chip.
+  List<CatalogModel> get visible {
+    final capability = this.capability;
+    return <CatalogModel>[
+      for (final model in models)
+        if (model.matches(query) &&
+            (capability == null || model.has(capability)))
+          model,
+    ];
+  }
 
-  bool get hasMore => nextCursor != null;
+  /// `6 results`, as drawn opposite the `Available models` heading.
+  String get resultsLabel {
+    final count = visible.length;
+    return count == 1 ? '1 result' : '$count results';
+  }
+
+  /// `6 REPOSITORIES · GGUF`, the overline above the title. Counts the whole
+  /// catalog rather than the filtered view — it describes what the app offers.
+  String get overline {
+    final count = models.length;
+    return '${count == 1 ? '1 REPOSITORY' : '$count REPOSITORIES'} · GGUF';
+  }
 
   CatalogState copyWith({
-    List<HfRepoSummary>? repos,
-    CatalogSort? sort,
+    List<CatalogModel>? models,
     String? query,
-    String? nextCursor,
-    bool clearCursor = false,
-    bool? isLoadingMore,
-    String? loadMoreError,
-    bool clearLoadMoreError = false,
+    ModelCapability? capability,
+    bool clearCapability = false,
   }) => CatalogState(
-    repos: repos ?? this.repos,
-    sort: sort ?? this.sort,
+    models: models ?? this.models,
     query: query ?? this.query,
-    nextCursor: clearCursor ? null : (nextCursor ?? this.nextCursor),
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    loadMoreError: clearLoadMoreError
-        ? null
-        : (loadMoreError ?? this.loadMoreError),
+    capability: clearCapability ? null : (capability ?? this.capability),
   );
 }

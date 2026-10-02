@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../config/di/view_models.dart';
+import '../../config/router/app_router.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/api_keys.dart';
@@ -10,7 +12,6 @@ import '../../data/models/byte_size.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../widgets/about_card.dart';
-import '../widgets/add_model_sheet.dart';
 import '../widgets/api_key_card.dart';
 import '../widgets/appearance_selector.dart';
 import '../widgets/installed_model_card.dart';
@@ -51,8 +52,8 @@ class SettingsScreen extends ConsumerWidget {
               top: metrics.gapXl,
               child: SectionHeading(
                 title: _modelsTitle(library),
-                actionLabel: 'Add model',
-                onAction: () => AddModelSheet.show(context),
+                actionLabel: 'Browse models',
+                onAction: () => context.push(Routes.catalog),
               ),
             ),
             _ModelList(library: library ?? ModelLibrary.empty),

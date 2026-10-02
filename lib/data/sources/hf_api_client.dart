@@ -7,18 +7,6 @@ import 'package:http/http.dart' as http;
 import '../models/gguf_file.dart';
 import '../models/hf_repo_summary.dart';
 
-/// How the catalog is ordered. The values are Hugging Face's `sort` parameter.
-enum CatalogSort {
-  downloads('downloads', 'Downloads'),
-  likes('likes', 'Likes'),
-  trending('trendingScore', 'Trending');
-
-  const CatalogSort(this.query, this.label);
-
-  final String query;
-  final String label;
-}
-
 /// A call to the Hub failed in a way worth telling the user about.
 class HfApiException implements Exception {
   const HfApiException(this.message, {this.isRateLimit = false});
@@ -37,6 +25,10 @@ class HfApiException implements Exception {
 ///
 /// Takes its [http.Client] by injection so tests can drive it with a
 /// `MockClient` instead of the network.
+///
+/// There is no search here any more. The app browses a catalog it ships (see
+/// `CatalogRepository`), so the Hub is only asked about a repository the user
+/// has named — which is what keeps this device under the rate limit.
 class HfApiClient {
   const HfApiClient(this._client);
 
@@ -44,46 +36,28 @@ class HfApiClient {
 
   static const String _host = 'huggingface.co';
 
-  /// Hugging Face paginates with an opaque cursor, so a page size only sets how
-  /// much arrives per request. Twenty fills roughly two screens of repo cards.
-  static const int pageSize = 20;
-
-  /// Lists GGUF repositories, newest cursor-paginated page first.
+  /// The live stats for [repoId]: downloads, likes and its file list.
   ///
-  /// [cursor] comes from a previous page's `nextCursor`; pass null for page
-  /// one. `pipeline_tag=text-generation` is not optional: `filter=gguf` alone
-  /// also returns embedding, vision and object-detection repos, none of which
-  /// can answer a chat prompt.
-  Future<HfRepoPage> listModels({
-    CatalogSort sort = CatalogSort.downloads,
-    String query = '',
-    String? cursor,
-    String? token,
-  }) async {
-    final uri = Uri.https(_host, '/api/models', <String, String>{
-      'filter': 'gguf',
-      'pipeline_tag': 'text-generation',
-      'sort': sort.query,
-      'direction': '-1',
-      'limit': '$pageSize',
-      if (query.trim().isNotEmpty) 'search': query.trim(),
-      'cursor': ?cursor,
-    });
-
-    final response = await _get(uri, token);
-    final items = await compute(_decodeRepos, response.body);
-    return HfRepoPage(items: items, nextCursor: _nextCursor(response.headers));
+  /// Everything the catalog card shows apart from these comes from the shipped
+  /// manifest, so a failure here costs the stats row and nothing else.
+  Future<HfRepoSummary> repoDetails(String repoId, {String? token}) async {
+    final response = await _get(Uri.https(_host, '/api/models/$repoId'), token);
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const HfApiException(
+        'Hugging Face returned an unexpected response.',
+      );
+    }
+    return HfRepoSummary.fromJson(decoded);
   }
 
-  /// Lists the loadable `.gguf` files in [repoId], largest detail first.
+  /// Lists the `.gguf` files in [repoId], smallest first.
   ///
-  /// Two kinds of file are filtered out rather than shown:
-  ///
-  /// * `mmproj-*` — vision projectors. They are `.gguf` files but cannot
-  ///   generate text on their own, so offering one is offering a broken model.
-  /// * `*-00001-of-00009.gguf` — shards of a split model. Downloading a single
-  ///   shard always fails at load time, and this build has no multi-file
-  ///   download flow.
+  /// Unlike the previous build this keeps `mmproj-*` projectors and adapters,
+  /// classifying them with [GgufFileKind] so the model sheet can list them as
+  /// reference rows. What is still dropped is a shard of a split model
+  /// (`*-00001-of-00009.gguf`): downloading one shard always fails at load time,
+  /// and there is no multi-file download flow.
   Future<List<GgufFile>> listFiles(String repoId, {String? token}) async {
     final uri = Uri.https(_host, '/api/models/$repoId/tree/main');
     final response = await _get(uri, token);
@@ -91,9 +65,14 @@ class HfApiClient {
 
     return <GgufFile>[
       for (final (name, size) in entries)
-        if (_isLoadableGguf(name))
-          GgufFile(repoId: repoId, fileName: name, sizeBytes: size),
-    ]..sort((a, b) => a.sizeBytes.compareTo(b.sizeBytes));
+        if (_isGguf(name) && !_isShard(name))
+          GgufFile(
+            repoId: repoId,
+            fileName: name,
+            sizeBytes: size,
+            kind: _kindOf(name),
+          ),
+    ]..sort(_byKindThenSize);
   }
 
   /// Returns the account name [token] belongs to. Backs the Verify button.
@@ -143,45 +122,33 @@ class HfApiClient {
     return <String, String>{'Authorization': 'Bearer $trimmed'};
   }
 
-  /// Extracts the cursor from `Link: <…&cursor=abc>; rel="next"`.
-  ///
-  /// Returns null on the last page, where the header is absent entirely.
-  static String? _nextCursor(Map<String, String> headers) {
-    final link = headers['link'] ?? headers['Link'];
-    if (link == null) return null;
-
-    for (final part in link.split(',')) {
-      if (!part.contains('rel="next"')) continue;
-      final start = part.indexOf('<');
-      final end = part.indexOf('>');
-      if (start < 0 || end <= start) continue;
-      final uri = Uri.tryParse(part.substring(start + 1, end));
-      return uri?.queryParameters['cursor'];
-    }
-    return null;
+  /// Weights first, then projectors and adapters, each group smallest first —
+  /// so the rows the user can act on are the ones at the top of the sheet.
+  static int _byKindThenSize(GgufFile a, GgufFile b) {
+    final byKind = a.kind.index.compareTo(b.kind.index);
+    if (byKind != 0) return byKind;
+    return a.sizeBytes.compareTo(b.sizeBytes);
   }
 
-  static bool _isLoadableGguf(String name) {
+  static bool _isGguf(String name) => name.toLowerCase().endsWith('.gguf');
+
+  static bool _isShard(String name) =>
+      RegExp(r'-\d{5}-of-\d{5}\.gguf$', caseSensitive: false).hasMatch(name);
+
+  static GgufFileKind _kindOf(String name) {
     final lower = name.toLowerCase();
-    if (!lower.endsWith('.gguf')) return false;
-    if (lower.contains('mmproj')) return false;
-    if (RegExp(r'-\d{5}-of-\d{5}\.gguf$').hasMatch(lower)) return false;
-    return true;
+    if (lower.contains('mmproj')) return GgufFileKind.mmproj;
+    if (lower.contains('lora') || lower.contains('adapter')) {
+      return GgufFileKind.adapter;
+    }
+    return GgufFileKind.model;
   }
-}
-
-/// Parsed off the UI isolate: a catalog page is tens of kilobytes of JSON and a
-/// tree response for a large repository can run to hundreds.
-List<HfRepoSummary> _decodeRepos(String body) {
-  final decoded = jsonDecode(body);
-  if (decoded is! List) return const <HfRepoSummary>[];
-  return <HfRepoSummary>[
-    for (final entry in decoded)
-      if (entry is Map<String, dynamic>) HfRepoSummary.fromJson(entry),
-  ];
 }
 
 /// Returns `(fileName, sizeBytes)` for every file in the tree.
+///
+/// Parsed off the UI isolate: a tree response for a large repository can run to
+/// hundreds of kilobytes of JSON.
 ///
 /// `lfs.size` is the authoritative byte count for a GGUF — the top-level `size`
 /// can be the size of the LFS pointer rather than the payload — so it wins when

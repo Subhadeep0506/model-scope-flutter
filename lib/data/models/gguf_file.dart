@@ -1,6 +1,28 @@
 import 'byte_size.dart';
 
-/// One downloadable `.gguf` inside a Hugging Face repository.
+/// What a `.gguf` in a repository actually is.
+///
+/// Only a [model] can answer a prompt. The other two are listed in the model
+/// sheet so the repository's contents are not a mystery, but they are reference
+/// rows with no download button — see `ModelFileRow`.
+enum GgufFileKind {
+  /// Weights. The only kind the app downloads.
+  model('Model'),
+
+  /// A vision projector. A `.gguf`, but it cannot generate text on its own —
+  /// offering one as a model is offering something that fails inside the loader.
+  mmproj('MMProj'),
+
+  /// A LoRA or similar, which has to be applied to a base model.
+  adapter('Adapter');
+
+  const GgufFileKind(this.label);
+
+  /// The mono badge at the head of the row.
+  final String label;
+}
+
+/// One `.gguf` inside a Hugging Face repository.
 ///
 /// Built from `GET /api/models/{repo}/tree/main`, which is the only endpoint
 /// that reports file sizes — the model list does not.
@@ -9,11 +31,16 @@ class GgufFile {
     required this.repoId,
     required this.fileName,
     required this.sizeBytes,
+    this.kind = GgufFileKind.model,
   });
 
   final String repoId;
   final String fileName;
   final int sizeBytes;
+  final GgufFileKind kind;
+
+  /// Whether this file is weights the app can download and load.
+  bool get isDownloadable => kind == GgufFileKind.model;
 
   /// Stable across the app: also the id of the model once installed.
   String get id => '$repoId/$fileName';

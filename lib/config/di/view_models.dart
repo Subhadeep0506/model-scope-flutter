@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/models/chat_session.dart';
 import '../../data/models/gguf_file.dart';
+import '../../data/models/hf_repo_summary.dart';
 import '../../data/models/sampler_settings.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../../data/sources/hf_api_client.dart';
@@ -11,10 +12,10 @@ import '../../presentation/view_models/api_keys_state.dart';
 import '../../presentation/view_models/api_keys_view_model.dart';
 import '../../presentation/view_models/app_settings_view_model.dart';
 import '../../presentation/view_models/catalog_state.dart';
+import '../../presentation/view_models/catalog_view_model.dart';
 import '../../presentation/view_models/chat_state.dart';
 import '../../presentation/view_models/chat_view_model.dart';
 import '../../presentation/view_models/download_view_model.dart';
-import '../../presentation/view_models/model_catalog_view_model.dart';
 import '../../presentation/view_models/model_library_view_model.dart';
 import '../../presentation/view_models/sampler_view_model.dart';
 import '../../presentation/view_models/session_filter_view_model.dart';
@@ -47,12 +48,9 @@ final modelLibraryViewModelProvider =
       ModelLibraryViewModel.new,
     );
 
-/// The Hugging Face browse sheet's list of repos.
-final modelCatalogViewModelProvider =
-    AsyncNotifierProvider<ModelCatalogViewModel, CatalogState>(
-      ModelCatalogViewModel.new,
-      retry: _noNetworkRetry,
-    );
+/// The Model catalog screen's list, read from the shipped manifest.
+final catalogViewModelProvider =
+    AsyncNotifierProvider<CatalogViewModel, CatalogState>(CatalogViewModel.new);
 
 final downloadViewModelProvider =
     NotifierProvider<DownloadViewModel, Map<String, DownloadProgress>>(
@@ -71,14 +69,27 @@ final storageViewModelProvider = AsyncNotifierProvider<StorageViewModel, int>(
   StorageViewModel.new,
 );
 
-/// The downloadable GGUF files of one repo, fetched on first watch.
+/// The GGUF files of one repo, fetched when its model sheet is opened.
 ///
 /// A plain [FutureProvider.family] rather than a notifier: there is no state to
-/// mutate, and Riverpod's per-argument caching is exactly the chip cache the
-/// browse sheet needs — a card scrolled back into view does not refetch. Retry
-/// is `ref.invalidate(repoFilesProvider(repoId))`.
+/// mutate, and Riverpod's per-argument caching means reopening a sheet does not
+/// refetch. Retry is `ref.invalidate(repoFilesProvider(repoId))`.
+///
+/// Nothing in the catalog list watches this. That is deliberate and is the
+/// single biggest reduction in traffic from the previous build, where every
+/// card on screen fired a tree request of its own just to label its chips.
 final repoFilesProvider = FutureProvider.family<List<GgufFile>, String>(
   (ref, repoId) => ref.watch(huggingFaceRepositoryProvider).filesOf(repoId),
+  retry: _noNetworkRetry,
+);
+
+/// Live downloads, likes and file count for one catalog card.
+///
+/// One request per manifest entry per app run, and nothing depends on it: the
+/// card renders in full from the manifest and simply omits its stats row when
+/// this is still loading or has failed.
+final repoStatsProvider = FutureProvider.family<HfRepoSummary, String>(
+  (ref, repoId) => ref.watch(huggingFaceRepositoryProvider).detailsOf(repoId),
   retry: _noNetworkRetry,
 );
 

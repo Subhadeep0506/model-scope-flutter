@@ -11,10 +11,12 @@ HfRepoSummary _$HfRepoSummaryFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       downloads: (json['downloads'] as num?)?.toInt() ?? 0,
       likes: (json['likes'] as num?)?.toInt() ?? 0,
-      tags:
-          (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      siblings:
+          (json['siblings'] as List<dynamic>?)
+              ?.map((e) => RepoSibling.fromJson(e as Map<String, dynamic>))
+              .toList() ??
           [],
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
     );
+
+RepoSibling _$RepoSiblingFromJson(Map<String, dynamic> json) =>
+    RepoSibling(rfilename: json['rfilename'] as String? ?? '');

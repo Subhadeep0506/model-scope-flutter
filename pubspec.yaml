@@ -23,6 +23,7 @@ dependencies:
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
   shared_preferences: ^2.5.5
+  background_downloader: ^9.6.3
 
 dev_dependencies:
   flutter_test:
@@ -36,5 +37,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # No asset declarations. Models are downloaded from Hugging Face at runtime
-  # through Settings rather than bundled — see assets/models/README.md.
+  # The catalog manifest only — it names the models the app offers and is a few
+  # kilobytes. The weights themselves are downloaded from Hugging Face at
+  # runtime through Settings rather than bundled; see assets/models/README.md.
+  assets:
+    - assets/catalog/models.json

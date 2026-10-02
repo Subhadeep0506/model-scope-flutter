@@ -26,9 +26,20 @@ Future<void> main() async {
 
   final documents = await getApplicationDocumentsDirectory();
 
+  final container = ProviderContainer(
+    overrides: [documentsDirectoryProvider.overrideWithValue(documents)],
+  );
+
+  // Reattaches to any transfer the system carried on with while the app was
+  // closed. Read here rather than left to the catalog screen so the download
+  // view model is alive for the whole run: a download that finishes while the
+  // user is somewhere else still has to be recorded in the library, and a
+  // notifier nobody is watching yet would never see the completion.
+  container.read(downloadViewModelProvider);
+
   runApp(
-    ProviderScope(
-      overrides: [documentsDirectoryProvider.overrideWithValue(documents)],
+    UncontrolledProviderScope(
+      container: container,
       child: const ModelScopeApp(),
     ),
   );
