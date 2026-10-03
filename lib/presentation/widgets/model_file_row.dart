@@ -75,7 +75,10 @@ class _Header extends StatelessWidget {
       children: <Widget>[
         MonoChip(file.kind.label),
         SizedBox(width: metrics.gapSm),
-        Flexible(
+        // Expanded, not Flexible: a loose fit leaves its unused allocation as
+        // slack at the end of the row, which pushes the size and the button
+        // away from the card's edge by a width that varies with the quant.
+        Expanded(
           child: MonoLabel(
             file.quantization,
             variant: MonoStyle.sliderValue,
@@ -83,8 +86,6 @@ class _Header extends StatelessWidget {
             maxLines: 1,
           ),
         ),
-        SizedBox(width: metrics.gapSm),
-        const Spacer(),
         if (file.isHeavy) ...<Widget>[
           Icon(
             Icons.warning_amber_rounded,

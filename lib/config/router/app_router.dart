@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../presentation/screens/app_shell.dart';
 import '../../presentation/screens/chat_screen.dart';
+import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/model_catalog_screen.dart';
 import '../../presentation/screens/placeholder_screen.dart';
 import '../../presentation/screens/sessions_screen.dart';
@@ -52,8 +53,7 @@ class AppTab {
 
 GoRouter createRouter() => GoRouter(
   navigatorKey: _rootNavigatorKey,
-  // Opens on the tab this part actually implements.
-  initialLocation: Routes.chat,
+  initialLocation: Routes.home,
   routes: <RouteBase>[
     GoRoute(
       path: Routes.session,
@@ -64,7 +64,7 @@ GoRouter createRouter() => GoRouter(
     StatefulShellRoute.indexedStack(
       builder: (_, _, navigationShell) => AppShell(shell: navigationShell),
       branches: <StatefulShellBranch>[
-        _branch(Routes.home, const PlaceholderScreen(title: 'Home')),
+        _branch(Routes.home, const HomeScreen()),
         _branch(Routes.chat, const SessionsScreen()),
         _branch(Routes.agent, const PlaceholderScreen(title: 'Agent')),
         _branch(

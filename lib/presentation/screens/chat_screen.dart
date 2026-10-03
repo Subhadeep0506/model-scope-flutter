@@ -101,18 +101,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Expanded(
               child: _Body(state: state, controller: _scroll),
             ),
+            // In the body rather than `bottomNavigationBar`: that slot is
+            // pinned to the window edge even when `resizeToAvoidBottomInset`
+            // shrinks the Scaffold, so the keyboard would cover the field.
+            // The composer carries its own `SafeArea` for the gesture bar.
+            ChatComposer(
+              enabled: state.canSend,
+              isStreaming: state.isStreaming,
+              attachmentName: state.attachmentName,
+              onSend: ref.read(chatViewModelProvider.notifier).send,
+              onStop: ref.read(chatViewModelProvider.notifier).stop,
+              onAttach: _attach,
+              onRemoveAttachment: () =>
+                  ref.read(chatViewModelProvider.notifier).attach(null),
+            ),
           ],
         ),
-      ),
-      bottomNavigationBar: ChatComposer(
-        enabled: state.canSend,
-        isStreaming: state.isStreaming,
-        attachmentName: state.attachmentName,
-        onSend: ref.read(chatViewModelProvider.notifier).send,
-        onStop: ref.read(chatViewModelProvider.notifier).stop,
-        onAttach: _attach,
-        onRemoveAttachment: () =>
-            ref.read(chatViewModelProvider.notifier).attach(null),
       ),
     );
   }

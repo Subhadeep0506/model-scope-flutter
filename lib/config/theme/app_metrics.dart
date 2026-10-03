@@ -21,6 +21,16 @@ class AppMetrics extends ThemeExtension<AppMetrics> {
   /// Height of a session row card.
   double get sessionCard => 98;
 
+  /// Height of one Home runtime-stat tile.
+  ///
+  /// Every tile is given exactly this, rather than sizing to its own content:
+  /// the mockup's tiles come out ragged because their captions differ in
+  /// length, and a grid of cards that nearly line up reads as a mistake.
+  double get statTile => 112;
+
+  /// Plot height inside a Home chart card, excluding the card's padding.
+  double get chartPlot => 170;
+
   /// Height of the bottom navigation bar.
   double get navBar => 72;
 

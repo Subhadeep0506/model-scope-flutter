@@ -4,9 +4,11 @@ import '../../data/models/app_settings.dart';
 import '../../data/models/chat_session.dart';
 import '../../data/models/gguf_file.dart';
 import '../../data/models/hf_repo_summary.dart';
+import '../../data/models/home_stats.dart';
 import '../../data/models/sampler_settings.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../../data/sources/hf_api_client.dart';
+import '../../domain/services/home_stats_builder.dart';
 import '../../domain/services/model_downloader.dart';
 import '../../presentation/view_models/api_keys_state.dart';
 import '../../presentation/view_models/api_keys_view_model.dart';
@@ -117,3 +119,19 @@ final filteredSessionsProvider = Provider<List<ChatSession>>((ref) {
   final now = DateTime.now();
   return sessions.where((session) => filter.matches(session, now)).toList();
 });
+
+/// Everything the Home dashboard draws.
+///
+/// A derived provider rather than a notifier of its own: there is no state here
+/// to mutate and nothing to persist. Every figure is folded out of the two view
+/// models that already own it, so a finished reply or a new download updates
+/// Home without anything having to tell it to.
+final homeStatsProvider = Provider<HomeStats>(
+  (ref) => buildHomeStats(
+    sessions:
+        ref.watch(sessionsViewModelProvider).value ?? const <ChatSession>[],
+    library:
+        ref.watch(modelLibraryViewModelProvider).value ?? ModelLibrary.empty,
+    now: DateTime.now(),
+  ),
+);

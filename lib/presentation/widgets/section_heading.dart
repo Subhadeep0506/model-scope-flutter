@@ -13,6 +13,7 @@ class SectionHeading extends StatelessWidget {
     required this.title,
     this.actionLabel,
     this.onAction,
+    this.color,
   });
 
   final String title;
@@ -20,6 +21,10 @@ class SectionHeading extends StatelessWidget {
   /// Omit for a heading with no trailing action.
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// Overrides the muted title colour. Home draws its section titles in ink,
+  /// where they separate whole blocks rather than label a settings group.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +37,7 @@ class SectionHeading extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(color: palette.muted),
+                ?.copyWith(color: color ?? palette.muted),
           ),
         ),
         if (label != null)
