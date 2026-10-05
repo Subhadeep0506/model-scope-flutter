@@ -21,7 +21,7 @@ class ChatMessage {
     required this.text,
     required this.createdAt,
     this.metrics,
-    this.attachmentName,
+    this.imagePaths = const <String>[],
     this.isStreaming = false,
     this.error,
   });
@@ -37,11 +37,11 @@ class ChatMessage {
   /// Present on finished assistant replies only.
   final GenerationMetrics? metrics;
 
-  /// Display name of a picked file.
-  ///
-  /// The model is text-only, so an attachment is recorded for display but is
-  /// never sent to it. See `ChatComposer` for the in-app note that says so.
-  final String? attachmentName;
+  /// Images sent with this message, as paths into the app's own storage.
+  /// Empty on every assistant reply and on any question asked without one.
+  /// A record written before vision support has no `image_paths` key, which
+  /// reads as empty — exactly right, so there is nothing to migrate.
+  final List<String> imagePaths;
 
   /// True while tokens are still arriving. Never persisted as true.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -63,7 +63,7 @@ class ChatMessage {
     text: text ?? this.text,
     createdAt: createdAt,
     metrics: metrics ?? this.metrics,
-    attachmentName: attachmentName,
+    imagePaths: imagePaths,
     isStreaming: isStreaming ?? this.isStreaming,
     error: error ?? this.error,
   );

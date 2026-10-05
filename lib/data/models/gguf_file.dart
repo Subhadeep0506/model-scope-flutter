@@ -1,16 +1,13 @@
 import 'byte_size.dart';
 
-/// What a `.gguf` in a repository actually is.
-///
-/// Only a [model] can answer a prompt. The other two are listed in the model
-/// sheet so the repository's contents are not a mystery, but they are reference
-/// rows with no download button — see `ModelFileRow`.
+/// What a `.gguf` in a repository actually is. Only a [model] can answer a
+/// prompt; the other two are listed without a download button.
 enum GgufFileKind {
   /// Weights. The only kind the app downloads.
   model('Model'),
 
-  /// A vision projector. A `.gguf`, but it cannot generate text on its own —
-  /// offering one as a model is offering something that fails inside the loader.
+  /// A vision projector. Holds no weights of its own, but downloading one
+  /// gives every installed quant of its repository the ability to read images.
   mmproj('MMProj'),
 
   /// A LoRA or similar, which has to be applied to a base model.
@@ -22,10 +19,8 @@ enum GgufFileKind {
   final String label;
 }
 
-/// One `.gguf` inside a Hugging Face repository.
-///
-/// Built from `GET /api/models/{repo}/tree/main`, which is the only endpoint
-/// that reports file sizes — the model list does not.
+/// One `.gguf` inside a Hugging Face repository. Built from
+/// `GET /api/models/{repo}/tree/main`, the only endpoint reporting file sizes.
 class GgufFile {
   const GgufFile({
     required this.repoId,
@@ -39,8 +34,13 @@ class GgufFile {
   final int sizeBytes;
   final GgufFileKind kind;
 
-  /// Whether this file is weights the app can download and load.
-  bool get isDownloadable => kind == GgufFileKind.model;
+  /// Whether the app can download this file. Adapters are the exception: they
+  /// adjust a base model rather than adding to one, and nothing here applies
+  /// them.
+  bool get isDownloadable => kind != GgufFileKind.adapter;
+
+  /// Whether this file is a vision projector rather than weights.
+  bool get isProjector => kind == GgufFileKind.mmproj;
 
   /// Stable across the app: also the id of the model once installed.
   String get id => '$repoId/$fileName';
@@ -55,22 +55,16 @@ class GgufFile {
   /// `Q4_K_M · 1.10 GB`, the label on a quant chip.
   String get chipLabel => '$quantization · $sizeLabel';
 
-  /// A file this large will not load on a typical phone.
-  ///
-  /// There is no portable way to read total device RAM from Flutter, so this is
-  /// a flat threshold rather than a real measurement: a 4-bit quant needs
-  /// roughly its file size in RAM plus the KV cache, and ~2 GB is already more
-  /// than a mid-range device will give one app. Heavy files are still offered —
-  /// the chip is just marked — because a tablet or desktop may well cope.
+  /// A file this large will not load on a typical phone. A flat threshold, not
+  /// a measurement — device RAM is not portably readable. Heavy files are still
+  /// offered, just marked, because a tablet or desktop may well cope.
   static const int heavyThresholdBytes = 2 * 1000 * 1000 * 1000;
 
   bool get isHeavy => sizeBytes >= heavyThresholdBytes;
 
-  /// The quantisation tag, e.g. `Q4_K_M`, `IQ3_XS`, `F16`.
-  ///
-  /// Hugging Face has no field for this; it only ever appears in the file name.
-  /// The last match wins because the tag is conventionally the final segment,
-  /// and the result is upper-cased so `…-q8_0.gguf` and `…-Q8_0.gguf` agree.
+  /// The quantisation tag, e.g. `Q4_K_M`. Hugging Face has no field for it, so
+  /// it comes out of the file name; the last match wins because the tag is
+  /// conventionally the final segment.
   String get quantization {
     final stem = fileName.replaceAll(
       RegExp(r'\.gguf$', caseSensitive: false),

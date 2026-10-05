@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/chat_message.dart';
-import 'attachment_chip.dart';
+import 'image_thumbnail.dart';
 
-/// A question, drawn as a filled bubble hugging the right edge.
-///
-/// Replies deliberately have no bubble, which is what gives the transcript its
-/// asymmetry in the mockup.
+/// A question, drawn as a filled bubble hugging the right edge. Replies
+/// deliberately have no bubble — that asymmetry is what the mockup calls for.
 class UserBubble extends StatelessWidget {
   const UserBubble({super.key, required this.message});
 
@@ -17,7 +15,7 @@ class UserBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = context.metrics;
-    final attachment = message.attachmentName;
+    final images = message.imagePaths;
 
     return LayoutBuilder(
       builder: (context, constraints) => Align(
@@ -31,8 +29,15 @@ class UserBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (attachment != null) ...<Widget>[
-                AttachmentChip(fileName: attachment),
+              if (images.isNotEmpty) ...<Widget>[
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: metrics.gapSm,
+                  runSpacing: metrics.gapSm,
+                  children: <Widget>[
+                    for (final path in images) ImageThumbnail(path: path),
+                  ],
+                ),
                 SizedBox(height: metrics.gapXs),
               ],
               _Bubble(text: message.text),

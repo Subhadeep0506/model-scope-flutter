@@ -8,10 +8,8 @@ import 'section_card.dart';
 class AboutCard extends StatelessWidget {
   const AboutCard({super.key});
 
-  /// Kept in step with `pubspec.yaml`'s `version:` by hand.
-  ///
-  /// Reading it at runtime would mean `package_info_plus` and a platform
-  /// channel for one string, which is not worth a dependency.
+  /// Kept in step with `pubspec.yaml`'s `version:` by hand. Reading it at
+  /// runtime would cost a whole dependency for one string.
   static const String version = '0.0.1';
 
   @override

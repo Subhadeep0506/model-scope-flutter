@@ -15,6 +15,7 @@ class InstalledModelCard extends StatelessWidget {
     super.key,
     required this.model,
     required this.isActive,
+    required this.hasVision,
     required this.onSelect,
     required this.onRemove,
   });
@@ -23,6 +24,10 @@ class InstalledModelCard extends StatelessWidget {
 
   /// The model Chat answers with, marked with a check.
   final bool isActive;
+
+  /// Whether a projector is installed for this model's repository, which is
+  /// what lets it read an image.
+  final bool hasVision;
 
   final VoidCallback onSelect;
   final VoidCallback onRemove;
@@ -42,7 +47,11 @@ class InstalledModelCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: _Details(model: model, isActive: isActive),
+              child: _Details(
+                model: model,
+                isActive: isActive,
+                hasVision: hasVision,
+              ),
             ),
             SizedBox(width: metrics.gapSm),
             SquareIconButton(
@@ -62,10 +71,15 @@ class InstalledModelCard extends StatelessWidget {
 }
 
 class _Details extends StatelessWidget {
-  const _Details({required this.model, required this.isActive});
+  const _Details({
+    required this.model,
+    required this.isActive,
+    required this.hasVision,
+  });
 
   final ModelDescriptor model;
   final bool isActive;
+  final bool hasVision;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +117,7 @@ class _Details extends StatelessWidget {
             _Chip(text: model.quantization),
             _Chip(text: model.sizeLabel),
             if (params != null) _Chip(text: params),
+            if (hasVision) _Chip(text: 'VISION'),
           ],
         ),
       ],

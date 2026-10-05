@@ -11,9 +11,8 @@ import 'icon_tile.dart';
 import 'section_card.dart';
 
 /// One credential: a labelled, obscured field with a reveal toggle and Verify.
-///
-/// The value is written to the secure store after a typing pause rather than on
-/// every keystroke, so pasting a token is one write and not forty.
+/// Written to the secure store after a typing pause, so pasting a token is one
+/// write and not forty.
 class ApiKeyCard extends ConsumerStatefulWidget {
   const ApiKeyCard({super.key, required this.kind});
 
@@ -179,8 +178,7 @@ class _VerifyButton extends StatelessWidget {
           ? 'Check this key against ${kind.label}'
           : 'Nothing in this build uses a ${kind.label} key yet',
       child: OutlinedButton(
-        // Disabled rather than hidden for the two keys this build only stores:
-        // the field still works, there is simply nothing to check it against.
+        // Disabled, not hidden, for the two keys this build only stores.
         onPressed: kind.isVerifiable && !checking ? onPressed : null,
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(0, 48),

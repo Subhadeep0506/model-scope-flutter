@@ -11,11 +11,8 @@ import '../../data/repositories/api_key_repository.dart';
 import '../../data/repositories/app_settings_repository.dart';
 import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/hugging_face_repository.dart';
-import '../../data/repositories/local_model_library_repository.dart';
 import '../../data/repositories/local_session_repository.dart';
-import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/model_library_repository.dart';
-import '../../data/repositories/prefs_session_repository.dart';
 import '../../data/repositories/session_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/sources/hf_api_client.dart';
@@ -23,28 +20,19 @@ import '../../data/sources/json_file_store.dart';
 import '../../data/sources/secure_key_store.dart';
 import '../../domain/services/app_cache_service.dart';
 import '../../domain/services/attachment_picker.dart';
-import '../../domain/services/background_model_downloader.dart';
+import '../../domain/services/image_store.dart';
 import '../../domain/services/llm_service.dart';
 import '../../domain/services/model_downloader.dart';
 import '../../domain/services/nobodywho_llm_service.dart';
 import '../router/app_router.dart';
 import 'view_models.dart';
 
-/// The app's writable directory.
-///
-/// Resolved in `main()` and injected with a `ProviderScope` override so the
-/// stores below can stay synchronous. Tests override it with a temp directory.
 final documentsDirectoryProvider = Provider<Directory>(
   (ref) => throw UnimplementedError(
     'documentsDirectoryProvider must be overridden in ProviderScope.',
   ),
 );
 
-/// Shared preferences, read and written on demand.
-///
-/// Unlike [documentsDirectoryProvider] this needs no override in `main()` —
-/// [SharedPreferencesAsync] has no instance to prime. Tests swap the platform
-/// implementation instead.
 final sharedPreferencesProvider = Provider<SharedPreferencesAsync>(
   (ref) => SharedPreferencesAsync(),
 );
@@ -70,26 +58,23 @@ final modelStoreProvider = Provider<JsonFileStore>(
   ),
 );
 
-/// Sessions live in shared preferences, with the old `sessions.json` store
-/// passed in as the one-shot migration source for upgrades from the build that
-/// wrote it. The file is read, never deleted, so a bad import is recoverable.
 final sessionRepositoryProvider = Provider<SessionRepository>(
-  (ref) => PrefsSessionRepository(
+  (ref) => SessionRepository(
     ref.watch(sharedPreferencesProvider),
     LocalSessionRepository(ref.watch(sessionStoreProvider)),
   ),
 );
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
-  (ref) => LocalSettingsRepository(ref.watch(settingsStoreProvider)),
+  (ref) => SettingsRepository(ref.watch(settingsStoreProvider)),
 );
 
 final appSettingsRepositoryProvider = Provider<AppSettingsRepository>(
-  (ref) => LocalAppSettingsRepository(ref.watch(settingsStoreProvider)),
+  (ref) => AppSettingsRepository(ref.watch(settingsStoreProvider)),
 );
 
 final modelLibraryRepositoryProvider = Provider<ModelLibraryRepository>(
-  (ref) => LocalModelLibraryRepository(ref.watch(modelStoreProvider)),
+  (ref) => ModelLibraryRepository(ref.watch(modelStoreProvider)),
 );
 
 /// Closed with the provider, so a disposed scope does not leak a socket pool.
@@ -100,11 +85,11 @@ final httpClientProvider = Provider<http.Client>((ref) {
 });
 
 final secureKeyStoreProvider = Provider<SecureKeyStore>(
-  (ref) => const PlatformSecureKeyStore(),
+  (ref) => const SecureKeyStore(),
 );
 
 final apiKeyRepositoryProvider = Provider<ApiKeyRepository>(
-  (ref) => SecureApiKeyRepository(ref.watch(secureKeyStoreProvider)),
+  (ref) => ApiKeyRepository(ref.watch(secureKeyStoreProvider)),
 );
 
 final hfApiClientProvider = Provider<HfApiClient>(
@@ -113,26 +98,22 @@ final hfApiClientProvider = Provider<HfApiClient>(
 
 /// The models this build offers, read from the manifest it ships with.
 final catalogRepositoryProvider = Provider<CatalogRepository>(
-  (ref) => AssetCatalogRepository(),
+  (ref) => CatalogRepository(),
 );
 
-/// What Hugging Face is asked about a repository the catalog already names.
-///
 /// The token is read per request rather than captured, so pasting one into the
 /// API keys card takes effect on the next call without rebuilding anything.
 final huggingFaceRepositoryProvider = Provider<HuggingFaceRepository>(
-  (ref) => HfHuggingFaceRepository(
+  (ref) => HuggingFaceRepository(
     ref.watch(hfApiClientProvider),
     () => ref.read(apiKeyRepositoryProvider).read(ApiKeyKind.huggingFace),
   ),
 );
 
-/// Transfers, owned by the platform rather than by this process.
-///
-/// Disposed with the scope so the update subscription does not outlive it;
-/// the downloads themselves carry on regardless, which is the point.
+/// Disposed with the scope so the update subscription does not outlive it; the
+/// downloads themselves carry on regardless, which is the point.
 final modelDownloaderProvider = Provider<ModelDownloader>((ref) {
-  final downloader = BackgroundModelDownloader();
+  final downloader = ModelDownloader();
   ref.onDispose(downloader.dispose);
   return downloader;
 });
@@ -142,25 +123,18 @@ final appCacheServiceProvider = Provider<AppCacheService>(
 );
 
 /// The model Chat answers with, or null when nothing is installed yet.
-///
-/// Derived from the library rather than hardcoded: models now arrive through
-/// the Settings screen, and the active one is whichever the user last picked.
 final activeModelProvider = Provider<ModelDescriptor?>(
   (ref) => ref.watch(modelLibraryViewModelProvider).value?.active,
 );
 
-/// Whether the library already holds a quant from this repository.
-///
-/// Drives the `Installed` badge on a catalog card. Deliberately per-repository
-/// rather than per-file: the badge answers "do I already have this model?",
-/// which a different quant of the same weights satisfies.
+/// Drives the `Installed` badge on a catalog card. Per-repository rather than
+/// per-file: a different quant of the same weights still counts as having it.
 final isRepoInstalledProvider = Provider.family<bool, String>((ref, repoId) {
   final library = ref.watch(modelLibraryViewModelProvider).value;
   return library?.models.any((model) => model.repoId == repoId) ?? false;
 });
 
-/// Looks up an installed model by id, for rows that name the model a session
-/// was recorded against. Returns null once that model has been removed.
+/// Null once that model has been removed.
 final installedModelProvider = Provider.family<ModelDescriptor?, String>(
   (ref, id) => ref.watch(modelLibraryViewModelProvider).value?.byId(id),
 );
@@ -173,7 +147,11 @@ final llmServiceProvider = Provider<LlmService>((ref) {
 });
 
 final attachmentPickerProvider = Provider<AttachmentPicker>(
-  (ref) => const FilePickerAttachmentPicker(),
+  (ref) => const AttachmentPicker(),
+);
+
+final imageStoreProvider = Provider<ImageStore>(
+  (ref) => ImageStore(ref.watch(documentsDirectoryProvider)),
 );
 
 /// Built once and held for the app's lifetime; rebuilding a [GoRouter] would

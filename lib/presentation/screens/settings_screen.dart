@@ -10,6 +10,7 @@ import '../../data/models/api_keys.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/models/byte_size.dart';
 import '../../data/models/model_descriptor.dart';
+import '../../data/models/projector_descriptor.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../widgets/about_card.dart';
 import '../widgets/api_key_card.dart';
@@ -21,9 +22,6 @@ import '../widgets/settings_header.dart';
 import '../widgets/storage_card.dart';
 
 /// Keys, models, appearance, runtime defaults, storage and about.
-///
-/// A [CustomScrollView] rather than a scrolling [Column]: the Models list is
-/// unbounded, and a `SliverList.builder` keeps off-screen rows unbuilt.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -161,10 +159,11 @@ class _ModelList extends ConsumerWidget {
             key: ValueKey<String>(model.id),
             model: model,
             isActive: model.id == library.activeId,
+            hasVision: library.hasVision(model),
             onSelect: () => ref
                 .read(modelLibraryViewModelProvider.notifier)
                 .setActive(model.id),
-            onRemove: () => _confirmRemove(context, ref, model),
+            onRemove: () => _confirmRemove(context, ref, library, model),
           );
         },
       ),
@@ -172,41 +171,77 @@ class _ModelList extends ConsumerWidget {
   }
 
   /// Deleting weights means re-downloading gigabytes, so it asks first — the
-  /// same dialog the Chats list uses before deleting a session.
+  /// same dialog the Chats list uses before deleting a session. A repository
+  /// with a projector gets a third action, because the projector is shared
+  /// and the user is the only one who knows whether they are done with it.
   Future<void> _confirmRemove(
     BuildContext context,
     WidgetRef ref,
+    ModelLibrary library,
     ModelDescriptor model,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final projector = library.projectorFor(model.repoId);
+    final choice = await showDialog<_RemoveChoice>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remove ${model.name}?'),
-        content: Text(
-          'This deletes ${model.sizeLabel} from this device. You can download '
-          'it again from Hugging Face.',
-        ),
+        content: Text(_removeBlurb(library, model, projector)),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(_RemoveChoice.cancel),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(context).pop(_RemoveChoice.modelOnly),
             style: TextButton.styleFrom(
               foregroundColor: context.palette.danger,
             ),
-            child: const Text('Remove'),
+            child: Text(projector == null ? 'Remove' : 'Delete model'),
           ),
+          if (projector != null)
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(_RemoveChoice.withProjector),
+              style: TextButton.styleFrom(
+                foregroundColor: context.palette.danger,
+              ),
+              child: const Text('Delete model and projector'),
+            ),
         ],
       ),
     );
 
-    if (confirmed ?? false) {
-      await ref.read(modelLibraryViewModelProvider.notifier).remove(model.id);
+    if (choice == null || choice == _RemoveChoice.cancel) return;
+    await ref
+        .read(modelLibraryViewModelProvider.notifier)
+        .remove(model.id, alsoProjector: choice == _RemoveChoice.withProjector);
+  }
+
+  /// What the dialog says. With a shared projector it names the models that
+  /// would lose their sight, since that cost is not obvious from the row.
+  static String _removeBlurb(
+    ModelLibrary library,
+    ModelDescriptor model,
+    ProjectorDescriptor? projector,
+  ) {
+    final base =
+        'This deletes ${model.sizeLabel} from this device. You can download '
+        'it again from Hugging Face.';
+    if (projector == null) return base;
+
+    final sharers = library.modelsOf(model.repoId, exceptId: model.id);
+    if (sharers.isEmpty) {
+      return '$base\n\nThis repository also has a ${projector.sizeLabel} '
+          'vision projector, which nothing else is using.';
     }
+    final names = sharers.map((m) => m.name).join(', ');
+    return '$base\n\nIts ${projector.sizeLabel} vision projector is shared '
+        'with $names — deleting it leaves them unable to read images.';
   }
 }
+
+/// What the remove dialog came back with.
+enum _RemoveChoice { cancel, modelOnly, withProjector }
 
 class _NoModels extends StatelessWidget {
   const _NoModels();

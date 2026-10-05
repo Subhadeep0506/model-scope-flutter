@@ -14,11 +14,8 @@ import 'mono_label.dart';
 import 'section_card.dart';
 
 /// One row of the Model catalog: everything the manifest knows, plus a stats
-/// line fetched from Hugging Face.
-///
-/// The stats are the only part that waits on the network, and nothing depends
-/// on them — if the Hub is slow, rate-limiting or unreachable the row simply
-/// renders without them rather than showing a spinner the user cannot act on.
+/// line fetched from Hugging Face. Nothing depends on the stats — if the Hub
+/// is slow or unreachable the row renders without them.
 class CatalogModelCard extends ConsumerWidget {
   const CatalogModelCard({super.key, required this.model, required this.onTap});
 
@@ -126,8 +123,8 @@ class _Tags extends ConsumerWidget {
   }
 }
 
-/// The filled green `Installed` tag. Filled rather than outlined so it reads as
-/// a state the user has already reached, not another thing to choose.
+/// The filled green `Installed` tag. Filled rather than outlined so it reads
+/// as a state already reached, not another thing to choose.
 class _InstalledBadge extends StatelessWidget {
   const _InstalledBadge();
 

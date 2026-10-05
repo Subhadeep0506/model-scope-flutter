@@ -26,11 +26,8 @@ class ApiKeysViewModel extends AsyncNotifier<ApiKeysState> {
     await ref.read(apiKeyRepositoryProvider).write(kind, value);
   }
 
-  /// Checks the Hugging Face token against `/api/whoami-v2`.
-  ///
-  /// Only [ApiKeyKind.huggingFace] is verifiable in this build — nothing here
-  /// consumes a Firecrawl or Tavily key yet, so pretending to check one would
-  /// be theatre.
+  /// Checks the Hugging Face token against `/api/whoami-v2`. Only that one is
+  /// verifiable — nothing in this build consumes the other keys yet.
   Future<void> verify(ApiKeyKind kind) async {
     if (!kind.isVerifiable) return;
 

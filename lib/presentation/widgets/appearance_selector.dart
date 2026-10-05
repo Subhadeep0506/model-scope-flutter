@@ -5,10 +5,8 @@ import '../../config/theme/app_palette.dart';
 import 'section_card.dart';
 
 /// The Dark / Light / System choice, drawn as a row of selectable cards.
-///
-/// The mockup shows only Dark and Light, but the app defaults to following the
-/// device, and an option the user cannot get back to is a trap — so System is
-/// a third tile rather than an invisible default.
+/// System is a visible third tile, not an invisible default, because the app
+/// starts there and an option you cannot get back to is a trap.
 class AppearanceSelector extends StatelessWidget {
   const AppearanceSelector({
     super.key,

@@ -1,9 +1,6 @@
 /// Formats a byte count the way every size label in the mockups is drawn.
-///
-/// Hugging Face reports sizes in decimal units, and the mockups follow suit —
-/// `1.10 GB` next to a quant chip is 1.10 × 10⁹ bytes, not a gibibyte. Keeping
-/// one helper means the catalog chips, the installed-model rows, the
-/// `Models · 8.06 GB` heading and the Storage card can never disagree.
+/// Decimal units, like Hugging Face: `1.10 GB` is 1.10 × 10⁹ bytes, not a
+/// gibibyte. One helper, so no two size labels in the app can disagree.
 String formatBytes(int bytes) {
   const int mb = 1000 * 1000;
   const int gb = 1000 * mb;

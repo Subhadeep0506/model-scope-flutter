@@ -8,12 +8,9 @@ import '../../data/models/generation_metrics.dart';
 import '../../domain/services/thinking_parser.dart';
 import 'mono_label.dart';
 
-/// A reply: plain body text across the full content width, with the measured
-/// metrics and its two actions underneath.
-///
-/// A reasoning model wraps its working in `<think>` tags. That is stored
-/// verbatim on the message and split apart here, so the answer reads as the
-/// answer and the reasoning is available without burying it.
+/// A reply: body text across the full content width, with the metrics and its
+/// two actions underneath. A reasoning model's `<think>` tags are stored
+/// verbatim on the message and split apart here.
 class AssistantMessage extends StatelessWidget {
   const AssistantMessage({
     super.key,
@@ -66,11 +63,9 @@ class AssistantMessage extends StatelessWidget {
   }
 }
 
-/// A reasoning model's working, collapsed behind a one-line header.
-///
-/// Collapsed by default because it is usually several times longer than the
-/// answer, but expanded on its own while [isLive] so the model does not look
-/// stalled during a long think.
+/// A reasoning model's working, collapsed behind a one-line header because it
+/// usually runs longer than the answer. Expanded on its own while [isLive], so
+/// the model does not look stalled during a long think.
 class _ThinkingBlock extends StatefulWidget {
   const _ThinkingBlock({required this.text, required this.isLive});
 
@@ -138,8 +133,7 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
   }
 }
 
-/// The reasoning itself: indented behind a rule, italic and muted, so it never
-/// reads as the model's answer.
+/// The reasoning itself, styled so it never reads as the model's answer.
 class _ThoughtText extends StatelessWidget {
   const _ThoughtText({required this.text});
 

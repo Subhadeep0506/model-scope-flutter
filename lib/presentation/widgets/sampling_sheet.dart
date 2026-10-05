@@ -149,8 +149,8 @@ class _SamplingSheetState extends ConsumerState<SamplingSheet> {
     LabelledSlider(
       label: 'CHAT_MEMORY',
       value: settings.historyTurns.toDouble(),
-      // Zero is a setting, not an absence of one: it answers every prompt with
-      // no recollection of the conversation, which is worth being able to say.
+      // Zero is a setting, not an absence of one: every prompt is answered
+      // with no recollection of the conversation.
       display: settings.historyTurns == 0
           ? 'OFF'
           : '${settings.historyTurns} turns',

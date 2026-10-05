@@ -8,11 +8,8 @@ import '../../config/theme/app_typography.dart';
 import '../../data/models/home_stats.dart';
 import 'chart_card.dart';
 
-/// Mean tokens per second for each parameter size the device has run.
-///
-/// The axis is a size scale, so it answers the question this whole build
-/// exists to answer: how far up the parameter count can this phone go before
-/// generation stops being usable.
+/// Mean tokens per second for each parameter size the device has run — how
+/// far up the parameter count this phone goes before generation drags.
 class ThroughputBarCard extends StatelessWidget {
   const ThroughputBarCard({super.key, required this.bars});
 

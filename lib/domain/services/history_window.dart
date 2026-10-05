@@ -1,18 +1,6 @@
 import '../../data/models/chat_message.dart';
 import 'thinking_parser.dart';
 
-/// The tail of [messages] the model is allowed to see, at most [turns]
-/// question-and-answer pairs long.
-///
-/// A model's context window is finite and the user sets this budget, so an
-/// unbounded transcript is replayed as its last [turns] questions and whatever
-/// followed them. [turns] of zero means every prompt is answered cold.
-///
-/// Two things are dropped on the way out, both because the model cannot use
-/// them: messages that are empty or carry a generation error, and the
-/// `<think>` block of any reply that has one — reasoning is usually the bulk
-/// of a reasoning model's output, so replaying it would spend the budget this
-/// window exists to protect.
 List<ChatMessage> historyWindow(List<ChatMessage> messages, int turns) {
   if (turns <= 0) return const <ChatMessage>[];
 
@@ -29,16 +17,24 @@ List<ChatMessage> historyWindow(List<ChatMessage> messages, int turns) {
   return window;
 }
 
-/// Whether [messages] has to be replayed before the model answers again.
+/// [message]'s text with a line naming each of its images in front of it.
 ///
-/// `nobodywho` keeps every prompt it was given and every token it generated,
-/// so after a plain `ask` its context is the transcript verbatim. That is
-/// already the right thing while the transcript fits the budget and no reply
-/// carried a `<think>` block; once either stops holding, the model is holding
-/// more than the user asked it to.
+/// Replaying a transcript re-feeds it as text, so an image that was sent on an
+/// earlier turn is named rather than shown again: a second pass through the
+/// projector would cost hundreds of tokens of a context the user has budgeted
+/// in turns, and would fail outright if the file had since been deleted.
 ///
-/// Replaying forces a re-prefill, which is slow on-device, so this exists to
-/// keep it to the turns that actually need it.
+/// Kept out of [historyWindow] on purpose. That function's output is compared
+/// against the stored text by [needsHistoryReseat], so marking it up there
+/// would force a reseat on every turn of a conversation holding images.
+String withImageMarkers(ChatMessage message) {
+  if (message.imagePaths.isEmpty) return message.text;
+  final markers = message.imagePaths.map((path) => '[image: ${_nameOf(path)}]');
+  return '${markers.join('\n')}\n${message.text}';
+}
+
+String _nameOf(String path) => path.split(RegExp(r'[\\/]')).last;
+
 bool needsHistoryReseat(List<ChatMessage> messages, int turns) {
   final window = historyWindow(messages, turns);
   if (window.length != messages.length) return true;
@@ -48,8 +44,6 @@ bool needsHistoryReseat(List<ChatMessage> messages, int turns) {
   return false;
 }
 
-/// The index of the [turns]-from-last user message, or 0 when the transcript
-/// holds fewer turns than that.
 int _startOfLastTurns(List<ChatMessage> messages, int turns) {
   var seen = 0;
   for (var i = messages.length - 1; i >= 0; i--) {

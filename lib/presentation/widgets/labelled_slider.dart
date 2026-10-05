@@ -4,9 +4,7 @@ import '../../config/theme/app_metrics.dart';
 import 'mono_label.dart';
 
 /// A slider under a monospace caption with its value aligned to the right.
-///
-/// Shared by the Sampling sheet and the Runtime defaults card — both mockups
-/// draw the same control, so it lives here rather than once in each.
+/// Shared by the Sampling sheet and the Runtime defaults card.
 class LabelledSlider extends StatelessWidget {
   const LabelledSlider({
     super.key,
@@ -24,8 +22,8 @@ class LabelledSlider extends StatelessWidget {
 
   final double value;
 
-  /// The value as the mockup prints it, used for the label, the tooltip and
-  /// the screen-reader announcement so all three agree.
+  /// The printed value, used for the label, tooltip and screen-reader
+  /// announcement alike so all three agree.
   final String display;
 
   final (double, double) range;

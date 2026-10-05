@@ -3,18 +3,15 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'app_settings.g.dart';
 
-// Declared at library level for the same reason as in `sampler_settings.dart`:
-// json_serializable copies default-value expressions verbatim into the
-// generated part file, where a class-scoped name would not resolve.
+// Library level because json_serializable copies default-value expressions
+// verbatim into the generated part, where a class-scoped name would not resolve.
 const ThemeMode _themeMode = ThemeMode.system;
 const int _contextLength = 4096;
 const bool _useGpu = true;
 
 /// Everything on the Settings screen that is not a sampling knob or an API key.
-///
-/// These map onto `Chat.fromPath` arguments rather than the sampler, which is
-/// why changing one forces a model reload: unlike temperature, they cannot be
-/// pushed onto a chat that is already running.
+/// These map onto `Chat.fromPath` arguments, so changing one forces a model
+/// reload — unlike temperature, they cannot be pushed onto a running chat.
 @JsonSerializable(fieldRename: FieldRename.snake)
 class AppSettings {
   const AppSettings({
@@ -41,16 +38,12 @@ class AppSettings {
   /// Token budget for the model's context window.
   final int contextLength;
 
-  /// CPU threads used for inference, or null to let `nobodywho` detect the
-  /// device's physical core count — which is usually the right answer, since
-  /// hyperthreads and efficiency cores make inference slower, not faster.
+  /// Null lets `nobodywho` detect the physical core count, usually the right
+  /// answer: hyperthreads and efficiency cores make inference slower.
   final int? cpuThreads;
 
-  /// Whether to offload to the GPU.
-  ///
-  /// The mockup draws a GPU LAYERS slider, but `nobodywho` exposes no layer
-  /// count — only this switch — so a slider here would be a control that does
-  /// nothing.
+  /// A switch, not the mockup's GPU LAYERS slider, because `nobodywho` exposes
+  /// no layer count — a slider here would control nothing.
   final bool useGpu;
 
   AppSettings copyWith({

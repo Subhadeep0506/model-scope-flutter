@@ -1,10 +1,8 @@
 import '../../data/models/catalog_model.dart';
 
-/// What the Model catalog screen is showing.
-///
-/// The whole catalog is held here, with the search text and capability filter
-/// applied on read. There is no paging and no cursor: the list ships with the
-/// app, so narrowing it is a list operation rather than a request.
+/// What the Model catalog screen is showing: the whole catalog, with the
+/// search text and capability filter applied on read. No paging or cursor —
+/// the list ships with the app, so narrowing it is not a request.
 class CatalogState {
   const CatalogState({
     this.models = const <CatalogModel>[],
@@ -18,7 +16,6 @@ class CatalogState {
   /// The selected filter chip, or null for `All`.
   final ModelCapability? capability;
 
-  /// The rows to draw, after the search field and the chip.
   List<CatalogModel> get visible {
     final capability = this.capability;
     return <CatalogModel>[

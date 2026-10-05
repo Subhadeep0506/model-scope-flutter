@@ -6,12 +6,8 @@ import 'gguf_file.dart';
 
 part 'model_descriptor.g.dart';
 
-/// A GGUF model the user has downloaded and the app can load.
-///
-/// The app used to ship one hardcoded model copied out of the asset bundle.
-/// Models now arrive from the Hugging Face catalog in Settings, so this is a
-/// persisted record rather than a constant: everything needed to load the
-/// weights, name them in the UI and delete them again lives here.
+/// A GGUF model the user has downloaded and the app can load — everything
+/// needed to load the weights, name them in the UI and delete them again.
 @JsonSerializable(fieldRename: FieldRename.snake)
 class ModelDescriptor {
   const ModelDescriptor({
@@ -28,11 +24,8 @@ class ModelDescriptor {
   factory ModelDescriptor.fromJson(Map<String, dynamic> json) =>
       _$ModelDescriptorFromJson(json);
 
-  /// Builds an entry from the catalog row and file the user downloaded.
-  ///
-  /// The name and parameter count are authored in the manifest rather than
-  /// derived from the repository name, so an installed model is titled exactly
-  /// as the catalog titled it.
+  /// Builds an entry from the catalog row and file the user downloaded, so an
+  /// installed model is titled exactly as the catalog titled it.
   factory ModelDescriptor.installed({
     required CatalogModel model,
     required GgufFile file,
@@ -64,12 +57,9 @@ class ModelDescriptor {
 
   final int sizeBytes;
 
-  /// Absolute path to the weights on disk, as reported by the downloader.
-  ///
-  /// Stored rather than derived, and re-checked on load. Models downloaded by
-  /// this build land under the app's support directory, but entries written by
-  /// earlier builds point into `nobodywho`'s own cache and keep working — which
-  /// is exactly why the path is recorded instead of being rebuilt from the id.
+  /// Absolute path to the weights. Stored rather than rebuilt from the id, so
+  /// entries written by earlier builds — which point into `nobodywho`'s own
+  /// cache rather than the app's support directory — keep working.
   final String localPath;
 
   final DateTime installedAt;

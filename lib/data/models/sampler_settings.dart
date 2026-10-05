@@ -2,9 +2,8 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'sampler_settings.g.dart';
 
-// Declared at library level rather than as class statics because
-// json_serializable copies default-value expressions verbatim into the
-// generated part file, where a `SamplerSettings.`-scoped name would not
+// Library level because json_serializable copies default-value expressions
+// verbatim into the generated part, where a class-scoped name would not
 // resolve. The class re-exports them below so call sites stay readable.
 const double _temperature = 0.70;
 const double _topP = 0.90;
@@ -56,11 +55,9 @@ class SamplerSettings {
   /// the limit.
   final int maxTokens;
 
-  /// How many past question-and-answer pairs are replayed into the model's
-  /// context when a session is opened or has outgrown the window.
-  ///
-  /// Unlike the sampler knobs above this is not pushed to `nobodywho` at all —
-  /// `ChatViewModel` applies it by choosing what to hand `restoreHistory`.
+  /// Past question-and-answer pairs replayed into the model's context. Not
+  /// pushed to `nobodywho`: `ChatViewModel` applies it by choosing what to
+  /// hand `restoreHistory`.
   final int historyTurns;
 
   final String systemPrompt;

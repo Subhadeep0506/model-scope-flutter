@@ -16,15 +16,9 @@ abstract final class Routes {
   static const String agent = '/agent';
   static const String settings = '/settings';
 
-  /// Full-screen transcript, deliberately outside the shell so it covers the
-  /// navigation bar — see `assets/design/chat-messages.png`.
+  /// Outside the shell, so it covers the navigation bar.
   static const String session = '/chat/session/:id';
-
-  /// The model catalog, nested under Settings so the navigation bar stays put
-  /// and back returns to Settings — see
-  /// `assets/design/settings-browse-models-list.png`.
   static const String catalog = '/settings/catalog';
-
   static String sessionOf(String id) => '/chat/session/$id';
 }
 
@@ -82,10 +76,6 @@ GoRouter createRouter() => GoRouter(
   ],
 );
 
-/// One tab, with any screens pushed on top of it.
-///
-/// Sub-routes are relative paths and nest inside the branch, so pushing one
-/// keeps the navigation bar on screen and leaves the other tabs' stacks alone.
 StatefulShellBranch _branch(
   String path,
   Widget child, {

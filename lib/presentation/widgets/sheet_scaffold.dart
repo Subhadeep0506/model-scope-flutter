@@ -5,10 +5,8 @@ import '../../config/theme/app_palette.dart';
 import 'square_icon_button.dart';
 
 /// Chrome shared by the Loaded models, Sampling and Attach sheets: a centred
-/// title with an outlined close square in the top-right corner.
-///
-/// The body scrolls so the sheet still works at large system text scales and
-/// lifts clear of the keyboard when a field inside it has focus.
+/// title with an outlined close square in the top-right corner. The body
+/// scrolls, so it survives large text scales and lifts clear of the keyboard.
 class SheetScaffold extends StatelessWidget {
   const SheetScaffold({
     super.key,
@@ -72,7 +70,6 @@ class SheetScaffold extends StatelessWidget {
     );
   }
 
-  /// Opens [child] with the scrim, shape and background the mockups use.
   static Future<T?> show<T>(BuildContext context, Widget child) {
     return showModalBottomSheet<T>(
       context: context,
@@ -88,14 +85,10 @@ class SheetScaffold extends StatelessWidget {
     );
   }
 
-  /// Bounds [child]'s height, which `isScrollControlled: true` otherwise leaves
-  /// free: a sheet with a scrolling body grows until its title sits under the
-  /// status bar, and `useSafeArea` alone does not stop that.
-  ///
-  /// The window is measured from the sheet's own context rather than the
-  /// opener's. The two can disagree — the widget that opens a sheet may sit
-  /// under a `MediaQuery` of its own — and the height that bounds a sheet is
-  /// the window's.
+  /// Bounds [child]'s height, which `isScrollControlled: true` otherwise
+  /// leaves free: a scrolling body grows until its title sits under the status
+  /// bar. Measured from the sheet's own context, not the opener's, since the
+  /// two can disagree and it is the window's height that bounds a sheet.
   static WidgetBuilder _capped(Widget child) =>
       (BuildContext context) => ConstrainedBox(
         constraints: BoxConstraints(

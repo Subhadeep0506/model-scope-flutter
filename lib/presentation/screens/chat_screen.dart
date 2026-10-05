@@ -10,7 +10,6 @@ import '../../config/theme/app_palette.dart';
 import '../../data/models/chat_message.dart';
 import '../view_models/chat_state.dart';
 import '../widgets/assistant_message.dart';
-import '../widgets/attach_sheet.dart';
 import '../widgets/chat_composer.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/loaded_models_sheet.dart';
@@ -101,19 +100,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Expanded(
               child: _Body(state: state, controller: _scroll),
             ),
-            // In the body rather than `bottomNavigationBar`: that slot is
-            // pinned to the window edge even when `resizeToAvoidBottomInset`
-            // shrinks the Scaffold, so the keyboard would cover the field.
-            // The composer carries its own `SafeArea` for the gesture bar.
             ChatComposer(
               enabled: state.canSend,
               isStreaming: state.isStreaming,
-              attachmentName: state.attachmentName,
+              attachments: state.attachments,
+              canAttach: state.canAttach,
+              hasVision: state.hasVision,
               onSend: ref.read(chatViewModelProvider.notifier).send,
               onStop: ref.read(chatViewModelProvider.notifier).stop,
               onAttach: _attach,
-              onRemoveAttachment: () =>
-                  ref.read(chatViewModelProvider.notifier).attach(null),
+              onRemoveAttachment: ref
+                  .read(chatViewModelProvider.notifier)
+                  .removeAttachment,
             ),
           ],
         ),
@@ -127,18 +125,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _attach() async {
-    final kind = await AttachSheet.show(context);
-    if (kind == null) return;
-    final name = await ref.read(attachmentPickerProvider).pick(kind);
-    if (name == null) return;
-    ref.read(chatViewModelProvider.notifier).attach(name);
+    final path = await ref.read(attachmentPickerProvider).pick();
+    if (path == null) return;
+    await ref.read(chatViewModelProvider.notifier).attach(path);
   }
 }
 
-/// One line about how the model loaded, under the model strip.
-///
-/// Not an error card: the chat works, the user is simply told that it is not
-/// running the way Settings asked — otherwise a slow reply looks like a bug.
 class _Notice extends StatelessWidget {
   const _Notice({required this.text});
 
@@ -288,10 +280,6 @@ class _EmptyTranscript extends StatelessWidget {
   }
 }
 
-/// Shown on a first run, before anything has been downloaded.
-///
-/// Deliberately not an error: there is nothing wrong, the user simply has not
-/// picked a model yet, so this points at the place where they can.
 class _NoModel extends StatelessWidget {
   const _NoModel();
 
@@ -331,8 +319,7 @@ class _NoModel extends StatelessWidget {
   }
 }
 
-/// Shown instead of the transcript when the weights could not be loaded, with
-/// the paths the loader looked in so the fix is obvious.
+/// Shown instead of the transcript when the weights could not be loaded.
 class _ModelError extends StatelessWidget {
   const _ModelError({required this.message, required this.onRetry});
 

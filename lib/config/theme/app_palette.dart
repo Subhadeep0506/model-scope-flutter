@@ -1,14 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Custom colour tokens for the app.
-///
-/// The light values were sampled directly from the mockups in `assets/design/`,
-/// so they are exact rather than approximated. The dark values have no mockup
-/// and are derived from the same hues.
-///
-/// A [ThemeExtension] is a typed bag of values carried on [ThemeData]. Read it
-/// with `Theme.of(context).extension<AppPalette>()`, or the shorter
-/// `context.palette` defined at the bottom of this file.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette({

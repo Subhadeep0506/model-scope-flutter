@@ -8,11 +8,9 @@ import '../../data/models/app_settings.dart';
 import 'labelled_slider.dart';
 import 'section_card.dart';
 
-/// Context length, CPU threads and GPU offload.
-///
-/// Every control here is an argument to `Chat.fromPath`, so committing one
-/// releases the loaded model — which is why the sliders only write on
-/// `onChangeEnd` and track a local draft while a thumb is moving.
+/// Context length, CPU threads and GPU offload. Committing any of these
+/// releases the loaded model, so the sliders only write on `onChangeEnd` and
+/// track a local draft while a thumb is moving.
 class RuntimeDefaultsCard extends ConsumerStatefulWidget {
   const RuntimeDefaultsCard({super.key, required this.settings});
 
@@ -123,8 +121,7 @@ class _GpuSwitch extends StatelessWidget {
           ),
         ),
         SizedBox(width: metrics.gapSm),
-        // Named here so a screen reader says what the switch is for, rather
-        // than announcing a bare "switch" at the end of the row.
+        // Named so a screen reader does not announce a bare "switch".
         Semantics(
           label: 'GPU acceleration',
           child: Switch(value: value, onChanged: onChanged),

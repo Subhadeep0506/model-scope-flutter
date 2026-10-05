@@ -7,10 +7,8 @@ class StorageViewModel extends AsyncNotifier<int> {
   @override
   Future<int> build() => ref.read(appCacheServiceProvider).sizeInBytes();
 
-  /// Deletes the app's own files and re-measures.
-  ///
-  /// Downloaded weights are untouched — they are removed one at a time from
-  /// the Models list, where the user can see what each one costs.
+  /// Deletes the app's own files and re-measures. Downloaded weights are
+  /// untouched — those are removed one at a time from the Models list.
   Future<void> clear() async {
     await ref.read(appCacheServiceProvider).clear();
     state = await AsyncValue.guard(

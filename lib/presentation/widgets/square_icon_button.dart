@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The square button the mockups use for `+`, back, tune, attach, send and the
-/// sheet close control.
-///
-/// All of them share one 44dp square with a 10dp radius; only the fill, border
-/// and icon colour change, so they are parameters rather than separate widgets.
+/// The square button used for `+`, back, tune, attach, send and sheet close.
+/// All share one 44dp square; only the fill, border and icon colour change.
 class SquareIconButton extends StatelessWidget {
   const SquareIconButton({
     super.key,

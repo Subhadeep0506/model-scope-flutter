@@ -4,12 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/di/providers.dart';
 import '../../data/models/app_settings.dart';
 
-/// Owns the Appearance and Runtime defaults sections.
-///
-/// Unlike the sampler, these cannot be pushed onto a model that is already
-/// running — context size, thread count and GPU offload are all arguments to
-/// `Chat.fromPath`. Changing one therefore releases the loaded model so the
-/// next conversation picks the new value up.
+/// Owns the Appearance and Runtime defaults sections. Unlike the sampler,
+/// these cannot be pushed onto a running model, so changing one releases the
+/// loaded weights and the next conversation picks the new value up.
 class AppSettingsViewModel extends AsyncNotifier<AppSettings> {
   @override
   Future<AppSettings> build() => ref.read(appSettingsRepositoryProvider).load();
@@ -31,11 +28,8 @@ class AppSettingsViewModel extends AsyncNotifier<AppSettings> {
 
   AppSettings get current => state.value ?? const AppSettings();
 
-  /// Applies [change] to the stored settings and persists the result.
-  ///
-  /// Awaits the build rather than reading `current`, so a tap that lands while
-  /// settings.json is still being read edits what is on disk instead of the
-  /// defaults — which the load would then overwrite anyway.
+  /// Applies [change] and persists it. Awaited, not `current`, so a tap that
+  /// lands mid-load edits what is on disk rather than the defaults.
   Future<void> _save(
     AppSettings Function(AppSettings) change, {
     bool reloadModel = true,

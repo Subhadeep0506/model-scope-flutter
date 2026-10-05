@@ -7,12 +7,10 @@ import '../../data/models/app_settings.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/models/sampler_settings.dart';
+import 'history_window.dart';
 import 'llm_service.dart';
 
 /// [LlmService] backed by `package:nobodywho`.
-///
-/// This and the downloader are the only files in the app that import
-/// `nobodywho`.
 class NobodyWhoLlmService implements LlmService {
   NobodyWhoLlmService();
 
@@ -20,6 +18,7 @@ class NobodyWhoLlmService implements LlmService {
 
   nobodywho.Chat? _chat;
   String? _loadedModelId;
+  String? _loadedProjectorPath;
 
   @override
   bool get isLoaded => _chat != null;
@@ -28,21 +27,32 @@ class NobodyWhoLlmService implements LlmService {
   String? get loadedModelId => _loadedModelId;
 
   @override
+  String? get loadedProjectorPath => _loadedProjectorPath;
+
+  @override
   Future<void> load({
     required ModelDescriptor model,
     required SamplerSettings settings,
     required AppSettings runtime,
+    String? projectorPath,
   }) async {
     final file = File(model.localPath);
     if (!await file.exists()) {
       throw ModelMissingException(name: model.name, path: model.localPath);
     }
 
+    // A projector that has gone missing costs the model its sight, not its
+    // ability to answer — so it is dropped with a line in the log rather than
+    // failing a load the weights are perfectly capable of.
+    final projector = await _usableProjector(projectorPath);
+
     _chat = null;
     _loadedModelId = null;
+    _loadedProjectorPath = null;
     try {
       _chat = await nobodywho.Chat.fromPath(
         modelPath: model.localPath,
+        projectionModelPath: projector,
         systemPrompt: settings.systemPrompt,
         contextSize: runtime.contextLength,
         threadCount: runtime.cpuThreads,
@@ -61,11 +71,21 @@ class NobodyWhoLlmService implements LlmService {
       );
     }
     _loadedModelId = model.id;
+    _loadedProjectorPath = projector;
     developer.log(
       'Loaded ${model.name} from ${model.localPath} '
-      '(context ${runtime.contextLength}, GPU ${runtime.useGpu})',
+      '(context ${runtime.contextLength}, GPU ${runtime.useGpu}, '
+      'vision ${projector == null ? 'off' : 'on'})',
       name: _logName,
     );
+  }
+
+  /// [path] when there is a file at it, otherwise null.
+  static Future<String?> _usableProjector(String? path) async {
+    if (path == null) return null;
+    if (await File(path).exists()) return path;
+    developer.log('Projector $path is gone, loading text-only', name: _logName);
+    return null;
   }
 
   /// The file's length, or null when it cannot be read — this runs while an
@@ -96,7 +116,7 @@ class NobodyWhoLlmService implements LlmService {
       if (message.text.isEmpty || message.error != null) continue;
       history.add(
         message.isUser
-            ? nobodywho.userMessage(message.text)
+            ? nobodywho.userMessage(withImageMarkers(message))
             : nobodywho.assistantMessage(message.text),
       );
     }
@@ -114,12 +134,24 @@ class NobodyWhoLlmService implements LlmService {
   }
 
   @override
-  Stream<String> ask(String prompt) {
+  Stream<String> ask(
+    String prompt, {
+    List<String> imagePaths = const <String>[],
+  }) {
     final chat = _chat;
     if (chat == null) {
       return Stream<String>.error(StateError('Model is not loaded yet.'));
     }
-    return chat.ask(prompt);
+    if (imagePaths.isEmpty) return chat.ask(prompt);
+
+    // Images first: vision models are trained on the picture arriving before
+    // the question about it, and the order measurably changes the answer.
+    return chat.askWithPrompt(
+      nobodywho.Prompt(<nobodywho.PromptPart>[
+        for (final path in imagePaths) nobodywho.ImagePart(path),
+        nobodywho.TextPart(prompt),
+      ]),
+    );
   }
 
   @override
@@ -129,13 +161,11 @@ class NobodyWhoLlmService implements LlmService {
   Future<void> dispose() async {
     _chat = null;
     _loadedModelId = null;
+    _loadedProjectorPath = null;
   }
 
-  /// Maps the app's settings onto a `nobodywho` sampler chain.
-  ///
-  /// `maxTokens` has no equivalent here — the sampler API has no token cap —
-  /// so the view model enforces it by counting stream events and calling
-  /// [stop].
+  /// Maps the app's settings onto a `nobodywho` sampler chain. `maxTokens` has
+  /// no equivalent — the view model enforces it by counting and calling [stop].
   nobodywho.SamplerConfig _samplerFrom(SamplerSettings settings) {
     return nobodywho.SamplerBuilder()
         .topK(topK: settings.topK)

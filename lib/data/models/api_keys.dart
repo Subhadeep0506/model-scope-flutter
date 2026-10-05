@@ -1,8 +1,5 @@
-/// Which third-party credential a field holds.
-///
-/// Only [huggingFace] is consumed by this build — it authenticates catalog
-/// calls and unlocks gated repositories. The other two are stored for the
-/// Agent tab, which is not implemented yet.
+/// Which third-party credential a field holds. Only [huggingFace] is used by
+/// this build; the other two are stored for the Agent tab, still unbuilt.
 enum ApiKeyKind {
   huggingFace(
     label: 'Hugging Face',

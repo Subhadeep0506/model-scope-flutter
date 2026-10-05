@@ -14,10 +14,8 @@ import '../../domain/services/token_collector.dart';
 import 'chat_state.dart';
 import 'sessions_view_model.dart';
 
-/// Drives one open conversation.
-///
-/// Only one chat screen exists at a time, so this holds the open session
-/// directly rather than using a family — which also keeps the single loaded
+/// Drives one open conversation. Only one chat screen exists at a time, so
+/// this holds the open session directly, which also keeps the single loaded
 /// model and this view model in step.
 class ChatViewModel extends Notifier<ChatState> {
   static const String _logName = 'ChatViewModel';
@@ -47,7 +45,6 @@ class ChatViewModel extends Notifier<ChatState> {
     await _prepare();
   }
 
-  /// Retries after a failed load, used by the error card.
   Future<void> reload() async {
     if (state.session == null) return;
     state = state.copyWith(status: ChatStatus.preparing, clearError: true);
@@ -59,21 +56,21 @@ class ChatViewModel extends Notifier<ChatState> {
     if (prompt.isEmpty || !state.canSend) return;
 
     final prior = state.messages;
+    final images = state.attachments;
     final user = ChatMessage(
       id: _uuid.v4(),
       role: MessageRole.user,
       text: prompt,
       createdAt: DateTime.now(),
-      attachmentName: state.attachmentName,
+      imagePaths: images,
     );
     await _commit(<ChatMessage>[...prior, user], title: _title(prompt));
-    state = state.copyWith(clearAttachment: true);
+    state = state.copyWith(clearAttachments: true);
     await _reseat(prior);
-    await _generate(prompt);
+    await _generate(prompt, images);
   }
 
   /// Puts the model's context back in step with the user's memory budget.
-  ///
   /// A no-op on most turns — see [needsHistoryReseat] for when it is not.
   Future<void> _reseat(List<ChatMessage> prior) async {
     final turns = await _historyTurns();
@@ -100,7 +97,9 @@ class ChatViewModel extends Notifier<ChatState> {
     await ref
         .read(llmServiceProvider)
         .restoreHistory(historyWindow(messages.sublist(0, prompt), turns));
-    await _generate(messages[prompt].text);
+    // The same question means the same images: asking again without them
+    // would be a different question.
+    await _generate(messages[prompt].text, messages[prompt].imagePaths);
   }
 
   void stop() {
@@ -108,20 +107,41 @@ class ChatViewModel extends Notifier<ChatState> {
     ref.read(llmServiceProvider).stop();
   }
 
-  void attach(String? fileName) => state = state.copyWith(
-    attachmentName: fileName,
-    clearAttachment: fileName == null,
-  );
+  /// Copies the image the user picked into the app's own storage and holds it
+  /// for the next message. The picker hands back a path the platform may
+  /// empty, so the copy is what the message ends up pointing at.
+  Future<void> attach(String sourcePath) async {
+    if (!state.canAttach) return;
+    final stored = await ref.read(imageStoreProvider).save(sourcePath);
+    if (stored == null) return;
+    // Re-checked: the picker is a round trip through another app, and the
+    // model may have been switched for a blind one while it was open.
+    if (!state.canAttach) {
+      await ref.read(imageStoreProvider).delete(<String>[stored]);
+      return;
+    }
+    state = state.copyWith(attachments: <String>[...state.attachments, stored]);
+  }
 
-  /// Called when the chat screen is popped.
+  /// Drops an image from the composer, deleting the copy with it — it was
+  /// never on a message, so nothing else can be pointing at it.
+  Future<void> removeAttachment(String path) async {
+    state = state.copyWith(
+      attachments: <String>[
+        for (final attachment in state.attachments)
+          if (attachment != path) attachment,
+      ],
+    );
+    await ref.read(imageStoreProvider).delete(<String>[path]);
+  }
+
   void close() => state = const ChatState();
 
   Future<void> _prepare() async {
     final llm = ref.read(llmServiceProvider);
     try {
-      // Reading the library through its future rather than the derived
-      // provider, so a cold start waits for models.json instead of deciding
-      // nothing is installed.
+      // Awaited, not read, so a cold start waits for models.json instead of
+      // deciding nothing is installed.
       final library = await ref.read(modelLibraryViewModelProvider.future);
       final model = library.active;
       if (model == null) {
@@ -134,11 +154,15 @@ class ChatViewModel extends Notifier<ChatState> {
       }
 
       final settings = await ref.read(samplerViewModelProvider.future);
+      final projector = library.projectorFor(model.repoId)?.localPath;
       // Reload when the user switched models in Settings: the loaded weights
-      // are still valid, they are simply the wrong ones.
+      // are still valid, they are simply the wrong ones. A projector that has
+      // arrived since counts too — the weights in memory were loaded blind.
       var notice = state.notice;
-      if (!llm.isLoaded || llm.loadedModelId != model.id) {
-        notice = await _load(model, settings);
+      if (!llm.isLoaded ||
+          llm.loadedModelId != model.id ||
+          llm.loadedProjectorPath != projector) {
+        notice = await _load(model, settings, projector);
       }
       await llm.restoreHistory(
         historyWindow(state.messages, settings.historyTurns),
@@ -147,6 +171,7 @@ class ChatViewModel extends Notifier<ChatState> {
         status: ChatStatus.ready,
         notice: notice,
         clearNotice: notice == null,
+        hasVision: projector != null,
       );
     } catch (error, stackTrace) {
       developer.log(
@@ -163,17 +188,24 @@ class ChatViewModel extends Notifier<ChatState> {
     }
   }
 
-  /// Loads [model], dropping GPU offload rather than giving up on it.
-  ///
-  /// Returns a line to show the user, or null when the load went as asked. The
-  /// retry is deliberately not written back to settings: a refused GPU
-  /// allocation is about this model on this run, so the next one gets another
-  /// chance rather than being quietly demoted forever.
-  Future<String?> _load(ModelDescriptor model, SamplerSettings settings) async {
+  /// Loads [model], dropping GPU offload rather than giving up on it. Returns
+  /// a line to show the user, or null when the load went as asked. The retry
+  /// is deliberately not written back to settings: a refused GPU allocation is
+  /// about this run, so the next model gets another chance.
+  Future<String?> _load(
+    ModelDescriptor model,
+    SamplerSettings settings,
+    String? projectorPath,
+  ) async {
     final llm = ref.read(llmServiceProvider);
     final runtime = await ref.read(appSettingsViewModelProvider.future);
     try {
-      await llm.load(model: model, settings: settings, runtime: runtime);
+      await llm.load(
+        model: model,
+        settings: settings,
+        runtime: runtime,
+        projectorPath: projectorPath,
+      );
       return null;
     } catch (error, stackTrace) {
       if (!runtime.useGpu) rethrow;
@@ -187,12 +219,16 @@ class ChatViewModel extends Notifier<ChatState> {
         model: model,
         settings: settings,
         runtime: runtime.copyWith(useGpu: false),
+        projectorPath: projectorPath,
       );
       return 'Loaded on the CPU — GPU offload was unavailable.';
     }
   }
 
-  Future<void> _generate(String prompt) async {
+  Future<void> _generate(
+    String prompt, [
+    List<String> images = const <String>[],
+  ]) async {
     final settings = await ref.read(samplerViewModelProvider.future);
     final collector = TokenCollector(maxTokens: settings.maxTokens);
     final id = _uuid.v4();
@@ -200,7 +236,7 @@ class ChatViewModel extends Notifier<ChatState> {
     _render(<ChatMessage>[...state.messages, _placeholder(id)]);
     state = state.copyWith(status: ChatStatus.streaming);
 
-    final failure = await _drain(prompt, collector, id);
+    final failure = await _drain(prompt, images, collector, id);
     final metrics = collector.finish();
 
     await _commit(
@@ -220,12 +256,13 @@ class ChatViewModel extends Notifier<ChatState> {
   /// Consumes the token stream. Returns an error description, or `null`.
   Future<String?> _drain(
     String prompt,
+    List<String> images,
     TokenCollector collector,
     String id,
   ) async {
     final LlmService llm = ref.read(llmServiceProvider);
     try {
-      await for (final token in llm.ask(prompt)) {
+      await for (final token in llm.ask(prompt, imagePaths: images)) {
         final room = collector.add(token);
         _render(_patch(id, (m) => m.copyWith(text: collector.text)));
         if (room) continue;
@@ -253,7 +290,6 @@ class ChatViewModel extends Notifier<ChatState> {
     isStreaming: true,
   );
 
-  /// Returns [state]'s messages with one of them rebuilt.
   List<ChatMessage> _patch(
     String id,
     ChatMessage Function(ChatMessage message) update,
@@ -297,11 +333,8 @@ class ChatViewModel extends Notifier<ChatState> {
     return -1;
   }
 
-  /// Describes a failure to get the model ready.
-  ///
-  /// Kept apart from [_describeGeneration] because the two are different
-  /// events: a model that never loaded has generated nothing, and labelling it
-  /// "Generation failed" sends the user looking in the wrong place.
+  /// Kept apart from [_describeGeneration]: a model that never loaded has
+  /// generated nothing, and "Generation failed" would misdirect the user.
   static String _describeLoad(Object error) => switch (error) {
     ModelMissingException() => error.toString(),
     ModelLoadException() => error.toString(),

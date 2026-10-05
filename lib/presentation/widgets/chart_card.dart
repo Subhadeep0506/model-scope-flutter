@@ -4,11 +4,9 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import 'section_card.dart';
 
-/// The card a Home chart is drawn inside.
-///
-/// Owns the one decision both charts share: what to show before anything has
-/// been generated. Empty axes would read as a chart that failed to load, so a
-/// plain sentence takes their place until there is something to plot.
+/// The card a Home chart is drawn inside. Owns the one decision both charts
+/// share: before anything has been generated a plain sentence takes the axes'
+/// place, since empty axes read as a chart that failed to load.
 class ChartCard extends StatelessWidget {
   const ChartCard({
     super.key,

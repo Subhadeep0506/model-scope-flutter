@@ -7,10 +7,9 @@ import 'icon_tile.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One row of the Recent activity feed.
-///
-/// The glyph is the only thing that tells the three kinds apart at a glance,
-/// so it follows [ActivityKind] rather than the wording of the title.
+/// One row of the Recent activity feed. The glyph is the only thing that tells
+/// the three kinds apart at a glance, so it follows [ActivityKind] rather than
+/// the wording of the title.
 class ActivityRow extends StatelessWidget {
   const ActivityRow({super.key, required this.entry, required this.now});
 

@@ -4,13 +4,9 @@ import '../../config/di/providers.dart';
 import '../../data/models/catalog_model.dart';
 import 'catalog_state.dart';
 
-/// Drives the Model catalog screen.
-///
-/// Loads the shipped manifest once, then does nothing but filtering. The
-/// previous version debounced every keystroke into a Hugging Face search and
-/// chased up to five upstream pages per result page; this one never touches the
-/// network, which is why the search field can respond on the keystroke instead
-/// of 350ms after it.
+/// Drives the Model catalog screen. Loads the shipped manifest once, then does
+/// nothing but filtering — it never touches the network, which is why the
+/// search field responds on the keystroke.
 class CatalogViewModel extends AsyncNotifier<CatalogState> {
   @override
   Future<CatalogState> build() async {

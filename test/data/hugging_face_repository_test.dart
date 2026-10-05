@@ -8,135 +8,159 @@ import 'package:model_scope_flutter/data/repositories/hugging_face_repository.da
 import 'package:model_scope_flutter/data/sources/hf_api_client.dart';
 
 void main() {
-  // The client decodes on `compute`, which needs a binding.
+  // The client decodes the file tree on `compute`, which needs a binding.
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  /// A repository whose Hub answers each request with the next entry of
-  /// [pages], a cursor following every page but the last.
-  ///
-  /// [requests] is handed back so a test can assert how many calls went out —
-  /// page chasing has to stay inside the Hub's rate limit.
-  (HfHuggingFaceRepository, List<int>) repositoryOver(
-    List<List<String>> pages,
-  ) {
-    final requests = <int>[];
+  const String repoId = 'bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF';
+
+  /// Every request the repository actually sent, in order.
+  late List<Uri> sent;
+
+  /// Bearer tokens seen by the Hub, `null` where the request was anonymous.
+  late List<String?> bearers;
+
+  String detailsBody() => jsonEncode(<String, Object?>{
+    'id': repoId,
+    'downloads': 182000,
+    'likes': 412,
+    'siblings': <Map<String, Object?>>[
+      <String, Object?>{'rfilename': 'qwen2.5-coder-1.5b-q4_k_m.gguf'},
+    ],
+  });
+
+  String treeBody() => jsonEncode(<Map<String, Object?>>[
+    <String, Object?>{
+      'type': 'file',
+      'path': 'qwen2.5-coder-1.5b-q4_k_m.gguf',
+      'lfs': <String, Object?>{'size': 1100000000},
+    },
+  ]);
+
+  /// A repository over a Hub that answers with [status]. [token] is read per
+  /// request rather than held as a copy.
+  HuggingFaceRepository repositoryOver({
+    int status = 200,
+    Future<String?> Function()? token,
+  }) {
     final client = HfApiClient(
       MockClient((request) async {
-        final index = requests.length;
-        requests.add(index);
-        final isLast = index >= pages.length - 1;
+        sent.add(request.url);
+        bearers.add(request.headers['Authorization']);
+        if (status != 200) return http.Response('{}', status, request: request);
+
+        final isTree = request.url.path.endsWith('/tree/main');
         return http.Response(
-          jsonEncode(<Map<String, Object?>>[
-            for (final id in pages[index])
-              <String, Object?>{'id': id, 'downloads': 10, 'likes': 2},
-          ]),
+          isTree ? treeBody() : detailsBody(),
           200,
-          headers: isLast
-              ? const <String, String>{}
-              : <String, String>{
-                  'link':
-                      '<https://hf.co/api/models?cursor=c$index>; '
-                      'rel="next"',
-                },
           request: request,
         );
       }),
     );
-    return (HfHuggingFaceRepository(client, () async => null), requests);
+    return HuggingFaceRepository(client, token ?? () async => null);
   }
 
-  Future<List<String>> idsFrom(HfHuggingFaceRepository repository) async {
-    final page = await repository.search(
-      sort: CatalogSort.downloads,
-      query: '',
-    );
-    return page.items.map((repo) => repo.id).toList();
-  }
+  setUp(() {
+    sent = <Uri>[];
+    bearers = <String?>[];
+  });
 
-  group('search', () {
-    test('drops repos whose name states more than 4B parameters', () async {
-      // Arrange
-      final (repository, _) = repositoryOver(<List<String>>[
-        <String>[
-          'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
-          'bartowski/Llama-3.2-3B-Instruct-GGUF',
-          'bartowski/Qwen2.5-7B-Instruct-GGUF',
-          'bartowski/Llama-3.3-70B-Instruct-GGUF',
-        ],
-      ]);
+  group('detailsOf', () {
+    test('asks the Hub once and serves the rest from memory', () async {
+      final repository = repositoryOver();
 
-      // Act
-      final ids = await idsFrom(repository);
+      // The catalog card rebuilds whenever anything above it changes.
+      final first = await repository.detailsOf(repoId);
+      final second = await repository.detailsOf(repoId);
 
-      // Assert — the device runs inference itself; 7B and up cannot answer.
-      check(ids).deepEquals(<String>[
-        'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
-        'bartowski/Llama-3.2-3B-Instruct-GGUF',
-      ]);
+      // The Hub rate-limits unauthenticated clients hard, so a rebuild
+      // must cost nothing.
+      check(sent).length.equals(1);
+      check(second.downloads).equals(first.downloads);
+      check(first.likes).equals(412);
     });
 
-    test('keeps a repo whose name states no parameter count', () async {
-      // Arrange
-      final (repository, _) = repositoryOver(<List<String>>[
-        <String>['microsoft/Phi-3.5-mini-instruct-gguf'],
+    test('two callers at once share one in-flight request', () async {
+      // The catalog builds its cards in the same frame.
+      final repository = repositoryOver();
+
+      await Future.wait<void>(<Future<void>>[
+        repository.detailsOf(repoId),
+        repository.detailsOf(repoId),
+        repository.detailsOf(repoId),
       ]);
 
-      // Act
-      final ids = await idsFrom(repository);
-
-      // Assert — plenty of small models never say, and `mini` is not a number.
-      check(ids).deepEquals(<String>['microsoft/Phi-3.5-mini-instruct-gguf']);
+      check(sent).length.equals(1);
     });
 
-    test('drops a mixture-of-experts repo named for its expert size', () async {
-      // Arrange
-      final (repository, _) = repositoryOver(<List<String>>[
-        <String>['TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF'],
-      ]);
+    test('reports the file count the stats row shows', () async {
+      final repository = repositoryOver();
 
-      // Act
-      final ids = await idsFrom(repository);
+      final summary = await repository.detailsOf(repoId);
 
-      // Assert — 8x7B is a 47B model, not a 7B one.
-      check(ids).isEmpty();
+      check(summary.fileCountLabel).equals('1 file');
     });
 
-    test('chases pages until it has enough to fill the list', () async {
-      // Arrange — two rows survive per upstream page.
-      final (repository, requests) = repositoryOver(<List<String>>[
-        for (var page = 0; page < 6; page++)
-          <String>[
-            'owner/Small-1B-$page-GGUF',
-            'owner/Small-2B-$page-GGUF',
-            'owner/Big-70B-$page-GGUF',
-          ],
-      ]);
+    test('a rate-limited answer is not remembered as the result', () async {
+      // Hugging Face returns 429 to anonymous clients under load.
+      final repository = repositoryOver(status: 429);
 
-      // Act
-      final ids = await idsFrom(repository);
+      await check(repository.detailsOf(repoId)).throws<HfApiException>();
 
-      // Assert — five requests is the cap, so ten rows come back and the
-      // sixth page is left for the next `loadMore`.
-      check(requests).length.equals(5);
-      check(ids).length.equals(10);
-    });
-
-    test('stops chasing at the end of the catalog', () async {
-      // Arrange — one short page, no cursor after it.
-      final (repository, requests) = repositoryOver(<List<String>>[
-        <String>['owner/Tiny-360M-GGUF'],
-      ]);
-
-      // Act
-      final page = await repository.search(
-        sort: CatalogSort.downloads,
-        query: '',
-      );
-
-      // Assert — a null cursor ends the list rather than being retried.
-      check(requests).length.equals(1);
-      check(page.nextCursor).isNull();
-      check(page.items).length.equals(1);
+      // Cached, the Retry button could never succeed.
+      await check(repository.detailsOf(repoId)).throws<HfApiException>();
+      check(sent).length.equals(2);
     });
   });
+
+  group('filesOf', () {
+    test('asks the Hub once per repository', () async {
+      // The model sheet is the only thing that reads a file tree.
+      final repository = repositoryOver();
+
+      final files = await repository.filesOf(repoId);
+      await repository.filesOf(repoId);
+
+      check(sent).length.equals(1);
+      check(sent.single.path).endsWith('/tree/main');
+      check(files).length.equals(1);
+      check(files.single.sizeBytes).equals(1100000000);
+    });
+
+    test('its cache is separate from the stats cache', () async {
+      // One is `/api/models/x`, the other `/api/models/x/tree/main`.
+      final repository = repositoryOver();
+
+      await repository.detailsOf(repoId);
+      await repository.filesOf(repoId);
+
+      // Sharing a key would serve one answer for both questions.
+      check(sent).length.equals(2);
+    });
+
+    test('a failed tree can be retried', () async {
+      // A gated repository rejects an anonymous request.
+      final repository = repositoryOver(status: 401);
+
+      await check(repository.filesOf(repoId)).throws<HfApiException>();
+      await check(repository.filesOf(repoId)).throws<HfApiException>();
+
+      // The user adds a token in Settings, then taps Retry.
+      check(sent).length.equals(2);
+    });
+  });
+
+  test(
+    'the stored token is read at request time, not at construction',
+    () async {
+      // A key typed into Settings must take effect without a restart.
+      String? stored;
+      final repository = repositoryOver(token: () async => stored);
+
+      await repository.detailsOf(repoId);
+      stored = 'hf_abc';
+      await repository.filesOf(repoId);
+
+      check(bearers).deepEquals(<String?>[null, 'Bearer hf_abc']);
+    },
+  );
 }

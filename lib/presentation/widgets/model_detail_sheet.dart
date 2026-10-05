@@ -11,18 +11,14 @@ import 'model_file_row.dart';
 import 'mono_label.dart';
 import 'sheet_scaffold.dart';
 
-/// Everything one catalog entry holds: its quants, its adapters and its mmproj
-/// files, each with the control that acts on it.
-///
-/// This is the only screen in the app that reads a repository's file tree, and
-/// it does so once per model per run. Opening a model is therefore a single
-/// request — the catalog list itself makes none.
+/// Everything one catalog entry holds: its quants, projectors and adapters,
+/// each with the control that acts on it. The only place that reads a
+/// repository's file tree, once per model per run.
 class ModelDetailSheet extends ConsumerWidget {
   const ModelDetailSheet({super.key, required this.model});
 
   final CatalogModel model;
 
-  /// Opens the sheet over the catalog, with the app's usual scrim and shape.
   static Future<void> show(BuildContext context, CatalogModel model) =>
       SheetScaffold.show<void>(context, ModelDetailSheet(model: model));
 
@@ -96,8 +92,9 @@ class _Summary extends StatelessWidget {
         Text('Available files', style: Theme.of(context).textTheme.titleMedium),
         SizedBox(height: metrics.gapXs),
         Text(
-          'Choose a model quant to download. Adapter and MMProj files are '
-          'shown for reference.',
+          'Choose a model quant to download. An MMProj file lets every quant '
+          'you install from here read images. Adapters are shown for '
+          'reference.',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: palette.muted),
         ),

@@ -2,16 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
-import '../../domain/services/model_downloader.dart';
+import '../../data/models/download_progress.dart';
 import 'mono_label.dart';
 import 'square_icon_button.dart';
 
 /// The progress bar and transport controls shown under a file row while its
-/// download is live.
-///
-/// Replaces the old fire-and-forget bar: now that the transfer belongs to the
-/// operating system it can be suspended and picked up again, so the row has to
-/// offer pause, resume and cancel rather than only reporting a percentage.
+/// download is live. The transfer belongs to the operating system and can be
+/// suspended, so the row offers pause, resume and cancel.
 class DownloadControls extends StatelessWidget {
   const DownloadControls({
     super.key,

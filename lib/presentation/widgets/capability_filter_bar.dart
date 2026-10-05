@@ -4,11 +4,8 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/catalog_model.dart';
 
-/// `All · Text to text · Image to text · Tool calling`, scrolling sideways.
-///
-/// Horizontal rather than wrapping because the row runs past the right edge in
-/// the mockup, and because a wrap would change the list's offset as chips are
-/// added — the catalog heading below it should not move.
+/// `All · Text to text · Image to text · Tool calling`, scrolling sideways
+/// rather than wrapping, so adding a chip cannot move the heading below it.
 class CapabilityFilterBar extends StatelessWidget {
   const CapabilityFilterBar({
     super.key,
@@ -64,8 +61,8 @@ class _FilterChip extends StatelessWidget {
     final metrics = context.metrics;
 
     // One node for the whole chip. Without `container` and `excludeSemantics`
-    // the `InkWell` and the caption each announce themselves too, so the chip
-    // is read out twice and the selected state lands on neither reading.
+    // a screen reader announces it twice and the selected state lands on
+    // neither reading.
     return Semantics(
       container: true,
       button: true,

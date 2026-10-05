@@ -10,29 +10,31 @@ import 'package:model_scope_flutter/config/di/providers.dart';
 import 'package:model_scope_flutter/config/theme/app_theme.dart';
 import 'package:model_scope_flutter/data/models/api_keys.dart';
 import 'package:model_scope_flutter/data/models/app_settings.dart';
+import 'package:model_scope_flutter/data/models/catalog_model.dart';
 import 'package:model_scope_flutter/data/models/chat_message.dart';
 import 'package:model_scope_flutter/data/models/chat_session.dart';
+import 'package:model_scope_flutter/data/models/download_progress.dart';
 import 'package:model_scope_flutter/data/models/gguf_file.dart';
 import 'package:model_scope_flutter/data/models/hf_repo_summary.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
+import 'package:model_scope_flutter/data/models/projector_descriptor.dart';
 import 'package:model_scope_flutter/data/models/sampler_settings.dart';
 import 'package:model_scope_flutter/data/repositories/api_key_repository.dart';
 import 'package:model_scope_flutter/data/repositories/app_settings_repository.dart';
+import 'package:model_scope_flutter/data/repositories/catalog_repository.dart';
 import 'package:model_scope_flutter/data/repositories/hugging_face_repository.dart';
 import 'package:model_scope_flutter/data/repositories/model_library_repository.dart';
 import 'package:model_scope_flutter/data/repositories/session_repository.dart';
 import 'package:model_scope_flutter/data/repositories/settings_repository.dart';
-import 'package:model_scope_flutter/data/sources/hf_api_client.dart';
 import 'package:model_scope_flutter/data/sources/secure_key_store.dart';
 import 'package:model_scope_flutter/domain/services/app_cache_service.dart';
 import 'package:model_scope_flutter/domain/services/attachment_picker.dart';
+import 'package:model_scope_flutter/domain/services/image_store.dart';
 import 'package:model_scope_flutter/domain/services/llm_service.dart';
 import 'package:model_scope_flutter/domain/services/model_downloader.dart';
 
-/// An [LlmService] that replays canned tokens instead of running a model.
-///
-/// It records every call so a test can assert that the max-token cap actually
-/// reached [stop], which is the only thing enforcing the cap.
+/// An [LlmService] that replays canned tokens instead of running a model. It
+/// records every call, so a test can assert the max-token cap reached [stop].
 class FakeLlmService implements LlmService {
   FakeLlmService({
     this.tokens = const <String>['Hello', ' ', 'world'],
@@ -49,16 +51,22 @@ class FakeLlmService implements LlmService {
   /// Thrown instead of streaming, to exercise the failure path.
   Object? failure;
 
-  /// Thrown by [load] instead of loading, or null to let it succeed.
-  ///
-  /// Takes the runtime settings so a test can refuse one configuration and
-  /// accept another — which is how the GPU-to-CPU fallback is exercised.
+  /// Thrown by [load] instead of loading, or null to let it succeed. Takes the
+  /// runtime settings so a test can refuse one configuration and accept
+  /// another, which is how the GPU-to-CPU fallback is exercised.
   Object? Function(AppSettings runtime)? loadFailure;
 
   /// Set to hold [load] open, so the `preparing` state can be observed.
   Completer<void>? loadGate;
 
   final List<String> prompts = <String>[];
+
+  /// The images handed to each [ask], one entry per call alongside [prompts].
+  final List<List<String>> askedImages = <List<String>>[];
+
+  /// The projector path each [load] was given, null entries included.
+  final List<String?> projectors = <String?>[];
+
   final List<SamplerSettings> applied = <SamplerSettings>[];
   final List<AppSettings> runtimes = <AppSettings>[];
   final List<List<ChatMessage>> restored = <List<ChatMessage>>[];
@@ -72,6 +80,7 @@ class FakeLlmService implements LlmService {
   bool _stopped = false;
   bool _loaded = false;
   String? _loadedModelId;
+  String? _loadedProjectorPath;
 
   @override
   bool get isLoaded => _loaded;
@@ -80,14 +89,19 @@ class FakeLlmService implements LlmService {
   String? get loadedModelId => _loadedModelId;
 
   @override
+  String? get loadedProjectorPath => _loadedProjectorPath;
+
+  @override
   Future<void> load({
     required ModelDescriptor model,
     required SamplerSettings settings,
     required AppSettings runtime,
+    String? projectorPath,
   }) async {
     loadCalls++;
     applied.add(settings);
     runtimes.add(runtime);
+    projectors.add(projectorPath);
     await loadGate?.future;
 
     final refusal = loadFailure?.call(runtime);
@@ -95,6 +109,7 @@ class FakeLlmService implements LlmService {
 
     _loaded = true;
     _loadedModelId = model.id;
+    _loadedProjectorPath = projectorPath;
   }
 
   @override
@@ -109,8 +124,12 @@ class FakeLlmService implements LlmService {
   Future<void> resetHistory() async {}
 
   @override
-  Stream<String> ask(String prompt) async* {
+  Stream<String> ask(
+    String prompt, {
+    List<String> imagePaths = const <String>[],
+  }) async* {
     prompts.add(prompt);
+    askedImages.add(List<String>.unmodifiable(imagePaths));
     _stopped = false;
     emitted = 0;
 
@@ -175,30 +194,66 @@ class FakeSettingsRepository implements SettingsRepository {
   }
 }
 
-/// An [AttachmentPicker] that returns a fixed name without touching a dialog.
+/// An [AttachmentPicker] that returns a fixed path without touching a dialog.
+/// Pass a list to hand back a different one per call, which is how the
+/// three-image cap is reached.
 class FakeAttachmentPicker implements AttachmentPicker {
-  FakeAttachmentPicker([this.result]);
+  FakeAttachmentPicker([String? result])
+    : results = result == null ? const <String>[] : <String>[result];
 
-  final String? result;
-  final List<AttachmentKind> kinds = <AttachmentKind>[];
+  FakeAttachmentPicker.each(this.results);
+
+  final List<String> results;
+  int calls = 0;
 
   @override
-  Future<String?> pick(AttachmentKind kind) async {
-    kinds.add(kind);
-    return result;
+  Future<String?> pick() async {
+    final index = calls++;
+    if (results.isEmpty) return null;
+    // The last entry repeats, so a one-path fake answers every call.
+    return results[index < results.length ? index : results.length - 1];
   }
+}
+
+/// An [ImageStore] that hands back a path under a notional app directory
+/// without copying anything, so widget tests never touch the disk.
+class FakeImageStore implements ImageStore {
+  static const String root = '/app/images';
+
+  final List<String> saved = <String>[];
+  final List<String> deleted = <String>[];
+
+  /// Set to make [save] fail, exercising the unreadable-source path.
+  bool refuse = false;
+
+  @override
+  Future<String?> save(String sourcePath) async {
+    if (refuse) return null;
+    final name = sourcePath.split(RegExp(r'[\\/]')).last;
+    final stored = '$root/${saved.length}-$name';
+    saved.add(stored);
+    return stored;
+  }
+
+  @override
+  Future<void> delete(Iterable<String> paths) async =>
+      deleted.addAll(paths.where((path) => path.startsWith(root)));
 }
 
 /// A [ModelLibraryRepository] held in memory.
 class FakeModelLibraryRepository implements ModelLibraryRepository {
   FakeModelLibraryRepository([this.stored = ModelLibrary.empty]);
 
-  /// Seeds a library holding [models], with the first one active.
-  FakeModelLibraryRepository.of(List<ModelDescriptor> models)
-    : stored = ModelLibrary(
-        models: models,
-        activeId: models.isEmpty ? null : models.first.id,
-      );
+  /// Seeds a library holding [models], with the first one active, and
+  /// optionally the [projectors] that give them vision.
+  FakeModelLibraryRepository.of(
+    List<ModelDescriptor> models, {
+    List<ProjectorDescriptor> projectors = const <ProjectorDescriptor>[],
+  }) : stored = ModelLibrary(
+         models: models,
+         projectors: projectors,
+         activeId: models.isEmpty ? null : models.first.id,
+       );
 
   ModelLibrary stored;
   int saveCalls = 0;
@@ -274,52 +329,66 @@ class FakeApiKeyRepository implements ApiKeyRepository {
   }
 }
 
-/// A [HuggingFaceRepository] that serves canned pages and file trees.
-///
-/// Cursors are page indices as strings: a page whose `nextCursor` is `'1'` is
-/// followed by `pages[1]`. That keeps the pagination tests readable without
-/// reproducing the Hub's opaque cursor format, which the client already covers.
+/// A [CatalogRepository] that serves a canned manifest.
+class FakeCatalogRepository implements CatalogRepository {
+  FakeCatalogRepository({List<CatalogModel>? models, this.failure})
+    : models = models ?? <CatalogModel>[fakeCatalogModel()];
+
+  List<CatalogModel> models;
+
+  /// Thrown by [load], for the catalog screen's error state.
+  Object? failure;
+
+  int loadCalls = 0;
+
+  @override
+  Future<List<CatalogModel>> load() async {
+    loadCalls++;
+
+    final Object? error = failure;
+    if (error != null) throw error;
+
+    return models;
+  }
+}
+
+/// A [HuggingFaceRepository] that serves canned stats and file trees.
 class FakeHuggingFaceRepository implements HuggingFaceRepository {
   FakeHuggingFaceRepository({
-    this.pages = const <HfRepoPage>[],
+    this.details = const <String, HfRepoSummary>{},
     this.files = const <String, List<GgufFile>>{},
     this.account = 'octocat',
     this.failure,
     this.filesFailure,
   });
 
-  List<HfRepoPage> pages;
+  /// Stats per repository id. A repository with no entry gets [fakeRepo].
+  Map<String, HfRepoSummary> details;
+
   Map<String, List<GgufFile>> files;
 
   /// What `verifyToken` returns.
   String account;
 
-  /// Thrown by [search] instead of returning a page.
+  /// Thrown by [detailsOf] and [verifyToken].
   Object? failure;
 
-  /// Thrown by [filesOf], so the chip-row error state can be exercised on its
-  /// own while the surrounding list still renders.
+  /// Thrown by [filesOf], so the model sheet's error state can be exercised on
+  /// its own while the catalog behind it still renders.
   Object? filesFailure;
 
-  final List<({CatalogSort sort, String query, String? cursor})> searches =
-      <({CatalogSort sort, String query, String? cursor})>[];
+  final List<String> detailRequests = <String>[];
   final List<String> fileRequests = <String>[];
   final List<String> verified = <String>[];
 
   @override
-  Future<HfRepoPage> search({
-    required CatalogSort sort,
-    required String query,
-    String? cursor,
-  }) async {
-    searches.add((sort: sort, query: query, cursor: cursor));
+  Future<HfRepoSummary> detailsOf(String repoId) async {
+    detailRequests.add(repoId);
 
     final Object? error = failure;
     if (error != null) throw error;
 
-    final index = cursor == null ? 0 : int.tryParse(cursor) ?? 0;
-    if (index >= pages.length) return HfRepoPage.empty;
-    return pages[index];
+    return details[repoId] ?? fakeRepo(id: repoId);
   }
 
   @override
@@ -343,46 +412,86 @@ class FakeHuggingFaceRepository implements HuggingFaceRepository {
   }
 }
 
-/// A [ModelDownloader] that replays scripted progress instead of fetching.
+/// A [ModelDownloader] the test drives by hand. A transfer belongs to the
+/// platform and reports on one long-lived stream, so a test says what the
+/// platform did with [emit] rather than queueing events up front.
 class FakeModelDownloader implements ModelDownloader {
-  FakeModelDownloader({List<DownloadProgress>? script})
-    : script =
-          script ??
-          <DownloadProgress>[
-            const Downloading(received: 50, total: 100),
-            const DownloadCompleted(_downloadedPath),
-          ];
+  FakeModelDownloader({this.restored = const <String, DownloadProgress>{}});
 
-  static const String _downloadedPath = '/cache/model.gguf';
+  static const String downloadedPath = '/cache/model.gguf';
 
-  /// Emitted in order, then the stream closes.
-  List<DownloadProgress> script;
+  /// Returned by [restore], standing in for transfers that outlived the app.
+  Map<String, DownloadProgress> restored;
 
-  /// Set to drive progress by hand, for tests that need to observe an
-  /// in-flight download rather than its outcome. Takes precedence over
-  /// [script]; the test owns closing it.
-  StreamController<DownloadProgress>? controller;
+  /// Thrown by [restore], so the view model's recovery path can be exercised.
+  Object? restoreFailure;
 
-  final List<String> urls = <String>[];
+  final List<GgufFile> started = <GgufFile>[];
+  final List<String> displayNames = <String>[];
   final List<String?> tokens = <String?>[];
+  final List<String> pauses = <String>[];
+  final List<String> resumes = <String>[];
+  final List<String> cancels = <String>[];
+  int restoreCalls = 0;
+  int disposeCalls = 0;
+  int notifyAsks = 0;
+
+  final StreamController<DownloadUpdate> _updates =
+      StreamController<DownloadUpdate>.broadcast();
 
   @override
-  Stream<DownloadProgress> download({required String url, String? token}) {
-    urls.add(url);
-    tokens.add(token);
+  Stream<DownloadUpdate> get updates => _updates.stream;
 
-    final manual = controller;
-    if (manual != null) return manual.stream;
-    return Stream<DownloadProgress>.fromIterable(script);
+  /// Reports progress for [id], as the platform would.
+  void emit(String id, DownloadProgress progress) {
+    if (_updates.isClosed) return;
+    _updates.add((id, progress));
+  }
+
+  @override
+  Future<Map<String, DownloadProgress>> restore() async {
+    restoreCalls++;
+
+    final Object? error = restoreFailure;
+    if (error != null) throw error;
+
+    return restored;
+  }
+
+  @override
+  Future<void> start({
+    required GgufFile file,
+    required String displayName,
+    String? token,
+  }) async {
+    started.add(file);
+    displayNames.add(displayName);
+    tokens.add(token);
+  }
+
+  @override
+  Future<void> pause(String id) async => pauses.add(id);
+
+  @override
+  Future<void> resume(String id) async => resumes.add(id);
+
+  @override
+  Future<void> cancel(String id) async => cancels.add(id);
+
+  @override
+  Future<void> askToNotify() async => notifyAsks++;
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls++;
+    await _updates.close();
   }
 }
 
 /// An [AppCacheService] that reports a fixed size instead of reading the disk.
-///
-/// Not just for determinism: `pump` runs inside a fake-async zone where real
-/// file I/O never completes, so a widget test holding the real service would
-/// leave the Storage card's indeterminate bar spinning and `pumpAndSettle`
-/// would never return. The real one is covered in `app_cache_service_test.dart`.
+/// `pump` runs inside a fake-async zone where real file I/O never completes, so
+/// the real service would leave the Storage card spinning forever. That one is
+/// covered in `app_cache_service_test.dart`.
 class FakeAppCacheService implements AppCacheService {
   FakeAppCacheService([this.bytes = 0]);
 
@@ -406,10 +515,12 @@ List<Override> fakeOverrides({
   required FakeSessionRepository sessions,
   FakeSettingsRepository? settings,
   FakeAttachmentPicker? picker,
+  FakeImageStore? images,
   FakeModelLibraryRepository? library,
   FakeAppSettingsRepository? appSettings,
   FakeApiKeyRepository? apiKeys,
   FakeHuggingFaceRepository? huggingFace,
+  FakeCatalogRepository? catalog,
   FakeModelDownloader? downloader,
   FakeAppCacheService? cache,
 }) => <Override>[
@@ -420,8 +531,9 @@ List<Override> fakeOverrides({
   ),
   llmServiceProvider.overrideWithValue(llm),
   attachmentPickerProvider.overrideWithValue(
-    picker ?? FakeAttachmentPicker('report.pdf'),
+    picker ?? FakeAttachmentPicker('photo.jpg'),
   ),
+  imageStoreProvider.overrideWithValue(images ?? FakeImageStore()),
   // One model installed by default: that is the ordinary state of the app,
   // and the empty library is a distinct case tests opt into deliberately.
   modelLibraryRepositoryProvider.overrideWithValue(
@@ -435,31 +547,40 @@ List<Override> fakeOverrides({
   huggingFaceRepositoryProvider.overrideWithValue(
     huggingFace ?? FakeHuggingFaceRepository(),
   ),
+  // The real one reads an asset, which `flutter test` can serve but only after
+  // the bundle is primed; a fake keeps every test off that path.
+  catalogRepositoryProvider.overrideWithValue(
+    catalog ?? FakeCatalogRepository(),
+  ),
   modelDownloaderProvider.overrideWithValue(
     downloader ?? FakeModelDownloader(),
   ),
   appCacheServiceProvider.overrideWithValue(cache ?? FakeAppCacheService()),
 ];
 
-/// Turns off Riverpod 3's automatic retry of a failed provider build.
-///
-/// By default a provider whose `build` throws stays in `AsyncLoading` holding
-/// the error and retries on a timer. That is reasonable at runtime, but a test
-/// asserting the failure would be waiting on a value that never settles — so
-/// pass this as `ProviderContainer.test(retry: noRetry)` whenever the fake is
-/// scripted to throw.
+/// Turns off Riverpod 3's automatic retry of a failed provider build. By
+/// default a failed build retries on a timer, so a test asserting the failure
+/// waits on a value that never settles. Pass as
+/// `ProviderContainer.test(retry: noRetry)` whenever a fake is scripted to
+/// throw.
 Duration? noRetry(int retryCount, Object error) => null;
 
 /// Wraps [child] in the app's theme and a [ProviderScope] holding [overrides].
-Widget harness(Widget child, {List<Override> overrides = const []}) =>
-    ProviderScope(
-      overrides: overrides,
-      child: MaterialApp(
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        home: child,
-      ),
-    );
+/// Pass [noRetry] as [retry] whenever a fake is scripted to throw, or a backoff
+/// timer is left running when the test ends.
+Widget harness(
+  Widget child, {
+  List<Override> overrides = const [],
+  Duration? Function(int retryCount, Object error)? retry,
+}) => ProviderScope(
+  overrides: overrides,
+  retry: retry,
+  child: MaterialApp(
+    theme: AppTheme.light,
+    darkTheme: AppTheme.dark,
+    home: child,
+  ),
+);
 
 /// Stops `google_fonts` reaching for the network, which is neither available
 /// nor deterministic under `flutter test`.
@@ -489,26 +610,66 @@ ModelDescriptor fakeInstalledModel({
   paramLabel: paramLabel,
 );
 
-/// A catalog row, as the browse sheet receives it.
+/// An installed projector for [repoId], defaulting to the repository
+/// [fakeInstalledModel] comes from — so the pair gives that model vision.
+/// [localPath] points at nothing real, for the same reason.
+ProjectorDescriptor fakeProjector({
+  String repoId = 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
+  String fileName = 'mmproj-BF16.gguf',
+  int sizeBytes = 310 * 1000 * 1000,
+  String? localPath,
+}) => ProjectorDescriptor(
+  repoId: repoId,
+  fileName: fileName,
+  sizeBytes: sizeBytes,
+  localPath: localPath ?? '/cache/$fileName',
+  installedAt: DateTime(2026, 10, 5, 12),
+);
+
+/// One entry of the shipped manifest, as the catalog screen receives it.
+CatalogModel fakeCatalogModel({
+  String repoId = 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
+  String name = 'SmolLM2 360M Instruct',
+  String description = 'A small instruction model for quick local tests.',
+  String? paramLabel = '360M',
+  List<ModelCapability> capabilities = const <ModelCapability>[
+    ModelCapability.textToText,
+  ],
+}) => CatalogModel(
+  repoId: repoId,
+  name: name,
+  description: description,
+  capabilities: capabilities,
+  paramLabel: paramLabel,
+);
+
+/// The live stats behind one catalog card.
 HfRepoSummary fakeRepo({
   String id = 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
   int downloads = 182000,
   int likes = 412,
-  List<String> tags = const <String>['gguf', 'text-generation'],
+  List<String> fileNames = const <String>['smollm2-360m-instruct-q8_0.gguf'],
 }) => HfRepoSummary(
   id: id,
   downloads: downloads,
   likes: likes,
-  tags: tags,
-  createdAt: DateTime(2026, 1, 1),
+  siblings: <RepoSibling>[
+    for (final name in fileNames) RepoSibling(rfilename: name),
+  ],
 );
 
-/// One downloadable quant inside [repoId].
+/// One file inside [repoId]. Weights unless [kind] says otherwise.
 GgufFile fakeGgufFile({
   String repoId = 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
   String fileName = 'smollm2-360m-instruct-q8_0.gguf',
   int sizeBytes = 399 * 1000 * 1000,
-}) => GgufFile(repoId: repoId, fileName: fileName, sizeBytes: sizeBytes);
+  GgufFileKind kind = GgufFileKind.model,
+}) => GgufFile(
+  repoId: repoId,
+  fileName: fileName,
+  sizeBytes: sizeBytes,
+  kind: kind,
+);
 
 /// A session with [count] alternating turns, newest last.
 ChatSession sessionWith({

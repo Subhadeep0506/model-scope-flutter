@@ -2,17 +2,16 @@ import 'dart:developer' as developer;
 
 import '../models/chat_session.dart';
 import '../sources/json_file_store.dart';
-import 'session_repository.dart';
 
-/// [SessionRepository] backed by a JSON file in the app's documents directory.
-class LocalSessionRepository implements SessionRepository {
+/// The `sessions.json` file chat sessions used to live in. Kept only as the
+/// migration source `SessionRepository` reads once, on an upgrade.
+class LocalSessionRepository {
   const LocalSessionRepository(this._store);
 
   final JsonFileStore _store;
 
   static const String _sessionsKey = 'sessions';
 
-  @override
   Future<List<ChatSession>> load() async {
     final document = await _store.read();
     final raw = document?[_sessionsKey];
@@ -36,7 +35,6 @@ class LocalSessionRepository implements SessionRepository {
     return sessions;
   }
 
-  @override
   Future<void> save(List<ChatSession> sessions) => _store.write(
     <String, dynamic>{_sessionsKey: sessions.map((s) => s.toJson()).toList()},
   );

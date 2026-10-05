@@ -18,10 +18,6 @@ import '../widgets/stat_tile.dart';
 import '../widgets/throughput_bar_card.dart';
 
 /// The dashboard: what this device has actually run.
-///
-/// A [CustomScrollView] rather than a scrolling [Column], matching Settings:
-/// the models and activity lists are unbounded, and the stat tiles want a
-/// sliver grid to be given a uniform height.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -87,13 +83,9 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Home's section titles separate whole blocks, so they are drawn in ink
-  /// rather than the muted grey Settings uses for its groups.
   static Widget _heading(BuildContext context, String title) =>
       SectionHeading(title: title, color: context.palette.ink);
 
-  /// The same create-then-push the Chats screen's `+` performs, so a session
-  /// started here is indistinguishable from one started there.
   static Future<void> _newChat(BuildContext context, WidgetRef ref) async {
     final router = GoRouter.of(context);
     final session = await ref.read(sessionsViewModelProvider.notifier).create();
@@ -125,12 +117,6 @@ class _Block extends StatelessWidget {
   }
 }
 
-/// The six figures, two to a row.
-///
-/// `mainAxisExtent` rather than `childAspectRatio`: it gives every tile exactly
-/// the same height whatever its caption says, which is the whole point. It is
-/// scaled by the text scaler so the tiles grow with the system font instead of
-/// clipping at large sizes.
 class _StatGrid extends StatelessWidget {
   const _StatGrid({required this.stats});
 
@@ -162,9 +148,6 @@ class _StatGrid extends StatelessWidget {
     );
   }
 
-  /// Captions say "across stored sessions" rather than "lifetime": the figures
-  /// are folded out of the sessions still on the device, so deleting one lowers
-  /// them, and a caption claiming otherwise would be a lie the user can catch.
   static List<Widget> _tiles(HomeStats stats) => <Widget>[
     StatTile(
       label: 'TOKENS GENERATED',

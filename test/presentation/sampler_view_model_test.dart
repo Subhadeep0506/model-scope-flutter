@@ -28,49 +28,39 @@ void main() {
   });
 
   test('loads the stored settings', () async {
-    // Act
     final loaded = await container.read(samplerViewModelProvider.future);
 
-    // Assert
     check(loaded.temperature).equals(1.1);
     check(loaded.topK).equals(12);
   });
 
   test('apply saves and pushes the change onto the loaded model', () async {
-    // Arrange
     final stored = await container.read(samplerViewModelProvider.future);
 
-    // Act
     await container
         .read(samplerViewModelProvider.notifier)
         .apply(stored.copyWith(temperature: 0.2));
 
-    // Assert
     check(settings.stored.temperature).equals(0.2);
     check(llm.applied.last.temperature).equals(0.2);
   });
 
   test('apply ignores a no-op change', () async {
-    // Arrange
     final stored = await container.read(samplerViewModelProvider.future);
     final before = settings.saveCalls;
 
-    // Act
     await container.read(samplerViewModelProvider.notifier).apply(stored);
 
-    // Assert — no disk write, no needless call into the native sampler.
+    // No disk write, no needless call into the native sampler.
     check(settings.saveCalls).equals(before);
     check(llm.applied).isEmpty();
   });
 
   test('resetToDefaults restores every knob at once', () async {
-    // Arrange
     await container.read(samplerViewModelProvider.future);
 
-    // Act
     await container.read(samplerViewModelProvider.notifier).resetToDefaults();
 
-    // Assert
     check(settings.stored).equals(const SamplerSettings());
     check(container.read(samplerViewModelProvider).value)
         .isNotNull()

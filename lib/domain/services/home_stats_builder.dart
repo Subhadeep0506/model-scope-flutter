@@ -6,19 +6,11 @@ import '../../data/models/home_stats.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/repositories/model_library_repository.dart';
 
-/// How many rows the Recent activity feed shows before it stops.
 const int _activityLimit = 8;
 
 /// How many days the latency trend covers.
 const int _trendDays = 7;
 
-/// Folds the stored sessions and the installed models into everything Home
-/// draws.
-///
-/// Pure, synchronous and free of Flutter: Home watches two view models that
-/// already hold this state, so there is nothing to load and nothing to persist.
-/// Keeping it a function rather than a notifier is what makes the whole
-/// dashboard testable without a widget or a device.
 HomeStats buildHomeStats({
   required List<ChatSession> sessions,
   required ModelLibrary library,
@@ -116,10 +108,8 @@ DailyLatency _bucket(List<_Reply> replies, DateTime day) {
   );
 }
 
-/// Mean throughput per parameter size, smallest first.
-///
-/// Models whose manifest entry states no parameter count are left out — an
-/// unlabelled bar would say nothing, and the axis in the mockup is a size scale.
+/// Mean throughput per parameter size, smallest first. Models with no stated
+/// parameter count are left out; an unlabelled bar on a size axis says nothing.
 List<SizeThroughput> _throughputBySize(
   List<_Reply> replies,
   ModelLibrary library,
@@ -191,10 +181,8 @@ ModelUsage _usageOf(ModelDescriptor model, List<_Reply> replies) {
   );
 }
 
-/// Sessions and downloads merged, newest first.
-///
-/// Agent runs belong here too and are the majority of the rows in the mockup;
-/// they join once agents exist, without this feed changing shape.
+/// Sessions and downloads merged, newest first. Agent runs join once agents
+/// exist, without this feed changing shape.
 List<ActivityEntry> _activity(
   List<ChatSession> sessions,
   ModelLibrary library,
@@ -222,11 +210,9 @@ List<ActivityEntry> _activity(
   return entries.take(_activityLimit).toList();
 }
 
-/// The mono slug the mockup prints under a session title: `smollm2-360m`.
-///
-/// A session created before anything was installed carries no model id at all,
-/// which is the ordinary state on a fresh install — saying `removed model`
-/// there would claim something was deleted that never existed.
+/// The mono slug under a session title: `smollm2-360m`. A session created
+/// before anything was installed carries no model id — ordinary on a fresh
+/// install — so it reads `no model` rather than `removed model`.
 String _slugOf(String modelId, ModelLibrary library) {
   if (modelId.isEmpty) return 'no model';
 

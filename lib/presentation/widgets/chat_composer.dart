@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
-import 'attachment_chip.dart';
+import '../view_models/chat_state.dart';
+import 'image_thumbnail.dart';
 import 'square_icon_button.dart';
 
-/// The bottom bar: attach, the message field, and send.
-///
-/// Dumb by design — it owns only its text controller and reports every action
-/// upwards, so all chat behaviour stays in the view model.
+/// The bottom bar: attach, the message field, and send. It owns only its text
+/// controller and reports every action upwards, so chat behaviour stays in one
+/// place.
 class ChatComposer extends StatefulWidget {
   const ChatComposer({
     super.key,
     required this.enabled,
     required this.isStreaming,
-    required this.attachmentName,
+    required this.attachments,
+    required this.canAttach,
+    required this.hasVision,
     required this.onSend,
     required this.onStop,
     required this.onAttach,
@@ -23,11 +25,22 @@ class ChatComposer extends StatefulWidget {
 
   final bool enabled;
   final bool isStreaming;
-  final String? attachmentName;
+
+  /// Images waiting to go out with the next message.
+  final List<String> attachments;
+
+  /// Whether another image can be picked — false for a model that cannot read
+  /// one, and false again once the cap is reached.
+  final bool canAttach;
+
+  /// Whether the loaded model can read images at all. Separates "no room left"
+  /// from "this model is blind", which the button says out loud.
+  final bool hasVision;
+
   final ValueChanged<String> onSend;
   final VoidCallback onStop;
   final VoidCallback onAttach;
-  final VoidCallback onRemoveAttachment;
+  final ValueChanged<String> onRemoveAttachment;
 
   @override
   State<ChatComposer> createState() => _ChatComposerState();
@@ -49,11 +62,24 @@ class _ChatComposerState extends State<ChatComposer> {
     widget.onSend(text);
   }
 
+  /// A disabled button announces why it is disabled, since there is no caption
+  /// left to carry the explanation.
+  String get _attachLabel {
+    if (widget.canAttach) return 'Attach an image';
+    if (!widget.hasVision) {
+      return 'Attach an image — this model cannot read images';
+    }
+    if (widget.attachments.length >= ChatState.maxImages) {
+      return 'Attach an image — limit of ${ChatState.maxImages} reached';
+    }
+    return 'Attach an image';
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final metrics = context.metrics;
-    final attachment = widget.attachmentName;
+    final attachments = widget.attachments;
 
     return Container(
       decoration: BoxDecoration(
@@ -73,23 +99,21 @@ class _ChatComposerState extends State<ChatComposer> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            if (attachment != null) ...<Widget>[
-              AttachmentChip(
-                fileName: attachment,
+            if (attachments.isNotEmpty) ...<Widget>[
+              _Attachments(
+                paths: attachments,
                 onRemove: widget.onRemoveAttachment,
               ),
-              SizedBox(height: metrics.gapXs),
-              const _AttachmentNote(),
               SizedBox(height: metrics.gapSm),
             ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 SquareIconButton(
-                  icon: Icons.attach_file_rounded,
-                  label: 'Attach a file',
+                  icon: Icons.add_photo_alternate_outlined,
+                  label: _attachLabel,
                   borderColor: palette.outline,
-                  onPressed: widget.enabled ? widget.onAttach : null,
+                  onPressed: widget.canAttach ? widget.onAttach : null,
                 ),
                 SizedBox(width: metrics.gapMd),
                 Expanded(
@@ -187,13 +211,29 @@ class _SendButton extends StatelessWidget {
   }
 }
 
-class _AttachmentNote extends StatelessWidget {
-  const _AttachmentNote();
+/// The images queued for the next message, at most three, so a plain row is
+/// enough — there is never anything to scroll.
+class _Attachments extends StatelessWidget {
+  const _Attachments({required this.paths, required this.onRemove});
+
+  final List<String> paths;
+  final ValueChanged<String> onRemove;
 
   @override
-  Widget build(BuildContext context) => Text(
-    'Recorded for reference only — this model is text-only, so the file is '
-    'not sent to it.',
-    style: Theme.of(context).textTheme.bodySmall,
-  );
+  Widget build(BuildContext context) {
+    final metrics = context.metrics;
+
+    return Wrap(
+      spacing: metrics.gapSm,
+      runSpacing: metrics.gapSm,
+      children: <Widget>[
+        for (final path in paths)
+          ImageThumbnail(
+            key: ValueKey<String>(path),
+            path: path,
+            onRemove: () => onRemove(path),
+          ),
+      ],
+    );
+  }
 }

@@ -12,10 +12,9 @@ import 'mono_label.dart';
 import 'section_card.dart';
 import 'sheet_scaffold.dart';
 
-/// Switches which installed model answers.
-///
-/// The throughput figure is the measured rate of the last reply in this
-/// session rather than a headline number, and is omitted until there is one.
+/// Switches which installed model answers. The throughput figure is the
+/// measured rate of this session's last reply, not a headline number, and is
+/// omitted until there is one.
 class LoadedModelsSheet extends ConsumerWidget {
   const LoadedModelsSheet({super.key});
 
@@ -39,6 +38,7 @@ class LoadedModelsSheet extends ConsumerWidget {
             _ModelRow(
               model: model,
               selected: model.id == library?.activeId,
+              hasVision: library?.hasVision(model) ?? false,
               throughput: model.id == library?.activeId
                   ? lastRun?.tokensPerSecond
                   : null,
@@ -97,17 +97,20 @@ class _ModelRow extends StatelessWidget {
   const _ModelRow({
     required this.model,
     required this.selected,
+    required this.hasVision,
     required this.throughput,
     required this.onTap,
   });
 
   final ModelDescriptor model;
   final bool selected;
+  final bool hasVision;
   final double? throughput;
   final VoidCallback onTap;
 
   String get _detail {
     final parts = <String>[model.quantization, model.sizeLabel];
+    if (hasVision) parts.add('Vision');
     final rate = throughput;
     if (rate != null) parts.add('${rate.toStringAsFixed(1)} tok/s');
     return parts.join(' · ');

@@ -1,123 +1,267 @@
-import '../../data/models/byte_size.dart';
+import 'dart:async';
+import 'dart:developer' as developer;
+
+import 'package:background_downloader/background_downloader.dart';
+
+import '../../data/models/download_progress.dart';
 import '../../data/models/gguf_file.dart';
+import '../../data/sources/hf_api_client.dart';
 
-/// How far a download has got.
-///
-/// A download is owned by the operating system rather than by the screen that
-/// started it, so these states have to describe a transfer the app may not have
-/// been running for — hence [DownloadPaused] and [DownloadQueued], which the
-/// previous fire-and-forget downloader had no way to represent.
-sealed class DownloadProgress {
-  const DownloadProgress();
-}
+class ModelDownloader {
+  ModelDownloader({FileDownloader? downloader})
+    : _downloader = downloader ?? FileDownloader();
 
-/// Accepted by the system, waiting its turn or waiting for a network.
-final class DownloadQueued extends DownloadProgress {
-  const DownloadQueued();
-}
+  static const String _logName = 'ModelDownloader';
 
-/// Bytes are arriving.
-final class Downloading extends DownloadProgress {
-  const Downloading({
-    required this.fraction,
-    this.totalBytes = 0,
-    this.canPause = false,
-  });
+  static const String _group = 'models';
+  static const BaseDirectory _baseDirectory = BaseDirectory.applicationSupport;
 
-  /// `0.0`–`1.0`. Always known, unlike the byte counts.
-  final double fraction;
+  static const int _retries = 3;
 
-  /// `0` when the server never reported a content length.
-  final int totalBytes;
+  final FileDownloader _downloader;
 
-  /// Whether this transfer can be suspended and picked up again.
-  ///
-  /// Resuming needs the server to honour an HTTP range request. Hugging Face's
-  /// CDN does, but a redirect could land somewhere that does not, and offering
-  /// a pause button that silently restarts the download would be worse than
-  /// offering none.
-  final bool canPause;
+  final StreamController<DownloadUpdate> _updates =
+      StreamController<DownloadUpdate>.broadcast();
 
-  /// `51`, for the `downloading 51%` caption.
-  int get percent => (fraction.clamp(0.0, 1.0) * 100).round();
+  final Map<String, DownloadProgress> _latest = <String, DownloadProgress>{};
 
-  int get receivedBytes =>
-      totalBytes <= 0 ? 0 : (fraction.clamp(0.0, 1.0) * totalBytes).round();
-}
+  StreamSubscription<TaskUpdate>? _subscription;
+  Future<void>? _ready;
+  bool _askedToNotify = false;
 
-/// Suspended with its bytes kept on disk, ready to carry on.
-final class DownloadPaused extends DownloadProgress {
-  const DownloadPaused({required this.fraction, this.totalBytes = 0});
+  Stream<DownloadUpdate> get updates => _updates.stream;
 
-  final double fraction;
-  final int totalBytes;
-
-  int get percent => (fraction.clamp(0.0, 1.0) * 100).round();
-
-  /// `paused at 51% · 1.10 GB of 2.15 GB`, so a half-finished download says
-  /// what it would cost to finish.
-  String get caption {
-    if (totalBytes <= 0) return 'paused at $percent%';
-    final received = (fraction.clamp(0.0, 1.0) * totalBytes).round();
-    return 'paused · ${formatBytes(received)} of ${formatBytes(totalBytes)}';
-  }
-}
-
-final class DownloadCompleted extends DownloadProgress {
-  const DownloadCompleted(this.localPath);
-
-  /// Absolute path to the weights, ready to hand to the model loader.
-  final String localPath;
-}
-
-final class DownloadFailed extends DownloadProgress {
-  const DownloadFailed(this.message);
-
-  final String message;
-}
-
-/// The user cancelled. Distinct from [DownloadFailed] so the row can simply
-/// disappear instead of accusing the app of breaking.
-final class DownloadCancelled extends DownloadProgress {
-  const DownloadCancelled();
-}
-
-/// A progress report, tagged with the [GgufFile.id] it belongs to.
-typedef DownloadUpdate = (String id, DownloadProgress progress);
-
-/// Fetches GGUF weights onto the device.
-///
-/// An interface so the view models can be tested against a fake, the same way
-/// `LlmService` keeps `package:nobodywho` out of everything above it.
-///
-/// Unlike the previous version this is not a per-call stream. A transfer
-/// outlives the widget that started it, the view model that watched it, and
-/// often the app process itself, so progress arrives on one long-lived
-/// [updates] stream keyed by file id instead.
-abstract interface class ModelDownloader {
-  /// Every progress report, for every transfer, for as long as the app runs.
-  Stream<DownloadUpdate> get updates;
-
-  /// Reattaches to transfers the system kept running while the app was gone.
-  ///
-  /// Returns only live states — queued, downloading, paused. A transfer that
-  /// finished or failed in a previous run is not resurrected; the first is
-  /// already recorded in the library, and the second would surface an error
-  /// about something the user has long forgotten.
-  Future<Map<String, DownloadProgress>> restore();
-
-  /// Begins fetching [file]. [displayName] names it in the system notification.
   Future<void> start({
     required GgufFile file,
     required String displayName,
     String? token,
-  });
+  }) async {
+    await _ensureReady();
 
-  Future<void> pause(String id);
-  Future<void> resume(String id);
+    final accepted = await _downloader.enqueue(
+      DownloadTask(
+        taskId: _taskIdOf(file.id),
+        url: file.downloadUrl,
+        filename: file.fileName,
+        directory: 'models/${_slug(file.repoId)}',
+        baseDirectory: _baseDirectory,
+        headers: HfApiClient.authHeaders(token),
+        group: _group,
+        updates: Updates.statusAndProgress,
+        allowPause: true,
+        retries: _retries,
+        displayName: displayName,
+        metaData: file.id,
+      ),
+    );
 
-  /// Stops the transfer and discards its partial bytes.
-  Future<void> cancel(String id);
+    if (!accepted) {
+      _emit(
+        file.id,
+        const DownloadFailed('This download could not be started.'),
+      );
+    }
+  }
 
-  Future<void> dispose();
+  Future<void> pause(String id) async {
+    final task = await _taskFor(id);
+    if (task is! DownloadTask) return;
+    final paused = await _downloader.pause(task);
+    if (paused) return;
+
+    developer.log('Could not pause $id', name: _logName);
+    final latest = _latest[id];
+    if (latest is Downloading) {
+      _emit(
+        id,
+        Downloading(
+          fraction: latest.fraction,
+          totalBytes: latest.totalBytes,
+          canPause: false,
+        ),
+      );
+    }
+  }
+
+  Future<void> resume(String id) async {
+    final task = await _taskFor(id);
+    if (task is! DownloadTask) return;
+    if (await _downloader.resume(task)) return;
+    _emit(id, const DownloadFailed('This download could not be resumed.'));
+  }
+
+  Future<void> cancel(String id) async {
+    await _downloader.cancelTaskWithId(_taskIdOf(id));
+  }
+
+  Future<Map<String, DownloadProgress>> restore() async {
+    await _ensureReady();
+
+    final restored = <String, DownloadProgress>{};
+    final finished = <String>[];
+    for (final record in await _downloader.database.allRecords(group: _group)) {
+      final id = _idOf(record.task);
+      if (record.status.isFinalState) {
+        finished.add(record.taskId);
+        continue;
+      }
+      final progress = _liveStateOf(record);
+      restored[id] = progress;
+      _latest[id] = progress;
+    }
+
+    await _downloader.database.deleteRecordsWithIds(finished);
+    return restored;
+  }
+
+  Future<void> dispose() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    await _updates.close();
+  }
+
+  Future<void> _ensureReady() => _ready ??= _initialise();
+
+  Future<void> _initialise() async {
+    _downloader.configureNotification(
+      running: const TaskNotification('{filename}', 'Downloading {progress}'),
+      complete: const TaskNotification('{filename}', 'Download complete'),
+      paused: const TaskNotification('{filename}', 'Paused'),
+      error: const TaskNotification('{filename}', 'Download failed'),
+      progressBar: true,
+    );
+    await _downloader.trackTasks();
+    _subscription = _downloader.updates.listen(
+      _onUpdate,
+      onError: (Object error, StackTrace stackTrace) => developer.log(
+        'Download update stream failed',
+        name: _logName,
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
+    await _downloader.resumeFromBackground();
+  }
+
+  Future<void> askToNotify() async {
+    if (_askedToNotify) return;
+    _askedToNotify = true;
+    try {
+      final permissions = _downloader.permissions;
+      if (await permissions.status(PermissionType.notifications) ==
+          PermissionStatus.undetermined) {
+        await permissions.request(PermissionType.notifications);
+      }
+    } catch (error) {
+      developer.log('Notification permission', name: _logName, error: error);
+    }
+  }
+
+  Future<void> _onUpdate(TaskUpdate update) async {
+    final id = _idOf(update.task);
+    switch (update) {
+      case TaskProgressUpdate(:final progress, :final task):
+        if (progress < 0) return;
+        _emit(
+          id,
+          Downloading(
+            fraction: progress,
+            totalBytes: update.hasExpectedFileSize
+                ? update.expectedFileSize
+                : 0,
+            canPause: task.allowPause,
+          ),
+        );
+      case TaskStatusUpdate(:final status, :final task, :final exception):
+        _emit(id, await _stateOf(status, task, exception));
+    }
+  }
+
+  Future<DownloadProgress> _stateOf(
+    TaskStatus status,
+    Task task,
+    TaskException? exception,
+  ) async {
+    final id = _idOf(task);
+    return switch (status) {
+      TaskStatus.enqueued ||
+      TaskStatus.waitingToRetry => const DownloadQueued(),
+      TaskStatus.running => _resumedFrom(id, task),
+      TaskStatus.paused => _pausedAt(id),
+      TaskStatus.complete => DownloadCompleted(await task.filePath()),
+      TaskStatus.canceled => const DownloadCancelled(),
+      TaskStatus.notFound => const DownloadFailed(
+        'That file is no longer on Hugging Face.',
+      ),
+      TaskStatus.failed => DownloadFailed(_describe(exception)),
+    };
+  }
+
+  Downloading _resumedFrom(String id, Task task) {
+    final latest = _latest[id];
+    final (fraction, total) = switch (latest) {
+      Downloading(:final fraction, :final totalBytes) => (fraction, totalBytes),
+      DownloadPaused(:final fraction, :final totalBytes) => (
+        fraction,
+        totalBytes,
+      ),
+      _ => (0.0, 0),
+    };
+    return Downloading(
+      fraction: fraction,
+      totalBytes: total,
+      canPause: task.allowPause,
+    );
+  }
+
+  DownloadPaused _pausedAt(String id) {
+    final latest = _latest[id];
+    if (latest is Downloading) {
+      return DownloadPaused(
+        fraction: latest.fraction,
+        totalBytes: latest.totalBytes,
+      );
+    }
+    return const DownloadPaused(fraction: 0);
+  }
+
+  DownloadProgress _liveStateOf(TaskRecord record) {
+    final total = record.expectedFileSize >= 0 ? record.expectedFileSize : 0;
+    final fraction = record.progress >= 0 ? record.progress : 0.0;
+    return switch (record.status) {
+      TaskStatus.paused => DownloadPaused(
+        fraction: fraction,
+        totalBytes: total,
+      ),
+      TaskStatus.running => Downloading(
+        fraction: fraction,
+        totalBytes: total,
+        canPause: record.task.allowPause,
+      ),
+      _ => const DownloadQueued(),
+    };
+  }
+
+  Future<Task?> _taskFor(String id) => _downloader.taskForId(_taskIdOf(id));
+
+  void _emit(String id, DownloadProgress progress) {
+    _latest[id] = progress;
+    if (_updates.isClosed) return;
+    _updates.add((id, progress));
+  }
+
+  static String _idOf(Task task) =>
+      task.metaData.isEmpty ? task.taskId : task.metaData;
+
+  static String _taskIdOf(String id) => _slug(id);
+
+  static String _slug(String value) =>
+      value.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+
+  static String _describe(TaskException? exception) {
+    final text = exception?.description.trim() ?? '';
+    if (text.isEmpty) return 'The download failed.';
+    if (text.length <= 120) return text;
+    return '${text.substring(0, 117)}…';
+  }
 }

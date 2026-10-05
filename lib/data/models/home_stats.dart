@@ -1,12 +1,9 @@
 import 'byte_size.dart';
 
-/// Everything the Home dashboard draws, in one immutable value.
-///
-/// Nothing here is persisted. Every figure is folded out of the stored sessions
-/// and the installed-model library each time Home builds, so the dashboard can
-/// never disagree with the Chats list or the Settings models section — and
-/// deleting a session lowers the totals, which is why the captions say "across
-/// stored sessions" rather than "lifetime".
+/// Everything the Home dashboard draws. Nothing here is persisted; every figure
+/// is folded out of the stored sessions and the model library each time Home
+/// builds, so deleting a session lowers the totals — hence the captions saying
+/// "across stored sessions" rather than "lifetime".
 class HomeStats {
   const HomeStats({
     required this.totalTokens,
@@ -70,16 +67,12 @@ class HomeStats {
   /// Sessions and downloads merged, newest first.
   final List<ActivityEntry> activity;
 
-  /// Agent runs. Agents are not in this build, so this is always zero — stated
-  /// as a getter rather than a field so there is nothing to pass in until they
-  /// exist.
+  /// Agents are not in this build, so these are zero — getters rather than
+  /// fields, so there is nothing to pass in until they exist.
   int get agentRuns => 0;
-
-  /// Agents available to run. Zero, for the same reason.
   int get agentCount => 0;
 
-  /// True before any reply has been recorded, which is what the charts and the
-  /// usage list show their empty copy for.
+  /// What the charts and the usage list show their empty copy for.
   bool get hasNoReplies => totalTokens == 0 && averageLatencyMs == 0;
 
   /// `8.06 GB`, matching the Settings models heading.

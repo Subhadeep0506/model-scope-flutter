@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_palette.dart';
 
 /// A Settings section title, optionally with a text action on the right.
-///
-/// `Models · 8.06 GB` and its green `Add model` link are one of these; the
-/// plainer `Appearance` and `Storage` headings are the same widget without an
-/// action.
 class SectionHeading extends StatelessWidget {
   const SectionHeading({
     super.key,

@@ -1,27 +1,13 @@
 /// A reply split into the model's reasoning and the answer it settled on.
-///
-/// [isOpen] is true while a `<think>` block has been opened but not yet closed,
-/// which is the normal state part-way through streaming a reasoning model.
+/// [isOpen] is true while a `<think>` block has been opened but not closed.
 typedef ThoughtSplit = ({String thinking, String answer, bool isOpen});
 
 const String _openTag = '<think>';
 const String _closeTag = '</think>';
 
-/// Separates a reasoning model's `<think>` block from its answer.
-///
-/// Models differ in what they actually emit, so four shapes are handled:
-///
-/// * no tags at all — the whole string is the answer, which is every
-///   non-reasoning model and the overwhelmingly common case;
-/// * `<think>…</think>answer` — the documented shape;
-/// * `<think>…` with no close — still streaming, so everything after the tag
-///   is reasoning and there is no answer yet;
-/// * `…</think>answer` with no open — several models leave the opening tag to
-///   the chat template and only emit the close, so a bare closer means
-///   everything before it was reasoning.
-///
-/// Whitespace around each part is trimmed, so a block that ends in the newline
-/// before the answer does not render as a blank line.
+/// Separates a reasoning model's `<think>` block from its answer. Four shapes
+/// are handled, because models differ in what they emit: no tags, both tags,
+/// an open with no close (still streaming), and a close with no open.
 ThoughtSplit splitThinking(String raw) {
   final openAt = raw.indexOf(_openTag);
   final closeAt = raw.indexOf(_closeTag);

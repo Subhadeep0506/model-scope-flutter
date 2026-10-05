@@ -1,11 +1,8 @@
 import '../../data/models/generation_metrics.dart';
 
-/// Accumulates a reply while measuring what `nobodywho` does not report.
-///
-/// `ChatStats` exposes only `contextSize` and `contextUsed`, so the latency,
-/// throughput and token count shown under each reply are timed here as the
-/// stream is drained. The same counter enforces the `MAX_TOKENS` slider, which
-/// the sampler API has no setting for.
+/// Accumulates a reply while measuring what `nobodywho` does not report:
+/// latency, throughput and token count, timed as the stream is drained. The
+/// same counter enforces the `MAX_TOKENS` slider, which the sampler API lacks.
 class TokenCollector {
   TokenCollector({required this.maxTokens, Stopwatch? clock})
     : _clock = clock ?? Stopwatch() {

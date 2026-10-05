@@ -9,11 +9,8 @@ import 'mono_label.dart';
 import 'section_card.dart';
 
 /// One row of the Models used list: what a model is, how much work it has done
-/// and which quant answered.
-///
-/// Installed models that have never answered appear too, at zero. They are the
-/// most interesting rows on the list — a model sitting on disk unused is a
-/// gigabyte the user may want back.
+/// and which quant answered. Models that have never answered appear at zero —
+/// an unused model on disk is a gigabyte the user may want back.
 class ModelUsageCard extends StatelessWidget {
   const ModelUsageCard({super.key, required this.usage, required this.now});
 
@@ -59,8 +56,7 @@ class ModelUsageCard extends StatelessWidget {
     );
   }
 
-  /// `148 runs · 310ms · 4h ago`, or `0 runs · never used` before the model has
-  /// answered anything.
+  /// `148 runs · 310ms · 4h ago`, or `0 runs · never used`.
   String get _summary {
     final last = usage.lastUsedAt;
     if (usage.runs == 0 || last == null) return '0 runs · never used';

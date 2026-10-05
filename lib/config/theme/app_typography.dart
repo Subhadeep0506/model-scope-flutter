@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Type scale for the app.
-///
-/// The mockups pair a geometric sans for UI text with a monospace for *every*
-/// piece of metadata — overlines, timestamps, `Q8_0`, `T 0.70`, tok/s readouts
-/// and the sampling slider labels. Outfit and JetBrains Mono are the closest
-/// Google Fonts match.
 abstract final class AppTypography {
   /// Sans face used for all UI copy.
   static TextStyle sans({

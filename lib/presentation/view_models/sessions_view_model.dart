@@ -4,10 +4,9 @@ import 'package:uuid/uuid.dart';
 import '../../config/di/providers.dart';
 import '../../data/models/chat_session.dart';
 
-/// Owns the list of conversations shown on the Chats screen.
-///
-/// Every mutation writes the whole list back to disk, which is cheap at this
-/// scale and keeps the on-disk document and the in-memory list from drifting.
+/// Owns the list of conversations shown on the Chats screen. Every change
+/// writes the whole list back, which is cheap at this scale and keeps the
+/// stored document and the in-memory list from drifting.
 class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
   static const String untitled = 'New chat';
 
@@ -31,8 +30,15 @@ class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
     return session;
   }
 
+  /// Deletes a session and the images its messages held — nothing else can be
+  /// pointing at them, so leaving the copies behind would only orphan them.
   Future<void> delete(String id) async {
+    final doomed = byId(id);
     await _write(_current.where((s) => s.id != id).toList());
+    if (doomed == null) return;
+    await ref.read(imageStoreProvider).delete(<String>[
+      for (final message in doomed.messages) ...message.imagePaths,
+    ]);
   }
 
   /// Replaces a session in place, or appends it if it is not in the list.
@@ -56,9 +62,8 @@ class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
     return ChatSession(
       id: _uuid.v4(),
       title: untitled,
-      // Empty when nothing is installed. The session is still created so the
-      // chat screen can open and explain why; it is stamped with whichever
-      // model answers once one exists.
+      // Empty when nothing is installed; the session is still created so the
+      // chat screen can open and explain why.
       modelId: ref.read(activeModelProvider)?.id ?? '',
       createdAt: now,
       updatedAt: now,

@@ -12,13 +12,9 @@ import 'mono_label.dart';
 import 'section_card.dart';
 import 'square_icon_button.dart';
 
-/// One file in the model sheet: kind badge, quant, size, name, and the control
-/// that acts on it.
-///
-/// Only weights get a download button. MMProj and adapter files are listed so
-/// the repository's contents are not a mystery, but they cannot answer a prompt
-/// on their own — downloading one would fail much later, inside the loader —
-/// so theirs is an eye that explains what the file is for.
+/// One file in the model sheet: kind badge, quant, size, name and its control.
+/// Weights and projectors get a download button; adapters are listed for
+/// reference, with an eye that explains what they are.
 class ModelFileRow extends ConsumerWidget {
   const ModelFileRow({super.key, required this.model, required this.file});
 
@@ -75,9 +71,8 @@ class _Header extends StatelessWidget {
       children: <Widget>[
         MonoChip(file.kind.label),
         SizedBox(width: metrics.gapSm),
-        // Expanded, not Flexible: a loose fit leaves its unused allocation as
-        // slack at the end of the row, which pushes the size and the button
-        // away from the card's edge by a width that varies with the quant.
+        // Expanded, not Flexible: a loose fit leaves slack at the end of the
+        // row, pushing the size and button off the card's edge.
         Expanded(
           child: MonoLabel(
             file.quantization,
@@ -128,14 +123,26 @@ class _Action extends ConsumerWidget {
       );
     }
 
+    // A repository holds one projector, so once it is in there is nothing
+    // left to fetch — the row says so rather than offering the bytes again.
+    final library = ref.watch(modelLibraryViewModelProvider).value;
+    if (file.isProjector &&
+        library?.projectorFor(file.repoId)?.fileName == file.fileName) {
+      return Icon(
+        Icons.check_rounded,
+        size: 20,
+        color: palette.primary,
+        semanticLabel: '${file.fileName} is installed',
+      );
+    }
+
     return SquareIconButton(
       icon: Icons.download_rounded,
       label: 'Download ${file.quantization}',
       size: 40,
       background: isBusy ? palette.primaryIdle : palette.primary,
       foreground: palette.onPrimary,
-      // Null while a transfer is live: the controls below the row own it from
-      // that point, and a second tap here would be a no-op the user can't see.
+      // Null while a transfer is live: the controls below the row own it then.
       onPressed: isBusy
           ? null
           : () => ref
@@ -162,9 +169,8 @@ class _Action extends ConsumerWidget {
 
   static String _blurbOf(GgufFileKind kind) => switch (kind) {
     GgufFileKind.mmproj =>
-      'A vision projector. It lets a model read images, but it holds no '
-          'weights of its own and cannot answer a prompt, so it is listed here '
-          'for reference rather than offered as a download.',
+      'A vision projector. Download it alongside this repository\'s weights '
+          'and every quant you have installed from here can read images.',
     GgufFileKind.adapter =>
       'An adapter. It adjusts a base model rather than replacing one, and this '
           'app loads whole models only, so it is listed here for reference '

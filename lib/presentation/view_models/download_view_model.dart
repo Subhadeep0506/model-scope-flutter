@@ -8,15 +8,14 @@ import '../../config/di/providers.dart';
 import '../../config/di/view_models.dart';
 import '../../data/models/api_keys.dart';
 import '../../data/models/catalog_model.dart';
+import '../../data/models/download_progress.dart';
 import '../../data/models/gguf_file.dart';
 import '../../data/models/model_descriptor.dart';
-import '../../domain/services/model_downloader.dart';
+import '../../data/models/projector_descriptor.dart';
 
-/// Tracks every download, keyed by [GgufFile.id].
-///
-/// Lives above the catalog screen on purpose: the transfer belongs to the
-/// operating system now, so leaving the screen — or the app — must not abandon
-/// it, and the row has to come back in the right state when the user returns.
+/// Tracks every download, keyed by [GgufFile.id]. Lives above the catalog
+/// screen on purpose: the transfer belongs to the operating system now, so
+/// leaving the screen — or the app — must not abandon it.
 class DownloadViewModel extends Notifier<Map<String, DownloadProgress>> {
   static const String _logName = 'DownloadViewModel';
 
@@ -38,10 +37,9 @@ class DownloadViewModel extends Notifier<Map<String, DownloadProgress>> {
   bool get hasActiveDownload =>
       state.values.any((progress) => progress is Downloading);
 
-  /// Fetches [file] and records it in the library once the bytes land.
-  ///
-  /// Does nothing when the same file is already in flight, so a double tap on a
-  /// download button cannot start two transfers.
+  /// Fetches [file] and records it in the library once the bytes land. Does
+  /// nothing when the same file is already in flight, so a double tap cannot
+  /// start two transfers.
   Future<void> start({
     required CatalogModel model,
     required GgufFile file,
@@ -101,12 +99,9 @@ class DownloadViewModel extends Notifier<Map<String, DownloadProgress>> {
     }
   }
 
-  /// Records a finished download, unless the bytes that landed are short.
-  ///
-  /// The platform verifies the content length itself, so this should never
-  /// fire — but a partial `.gguf` only fails much later, inside the native
-  /// loader, as an unreadable error on the chat screen. Checking here is what
-  /// turns that into a retryable message on the row the user just tapped.
+  /// Records a finished download, unless the bytes that landed are short. A
+  /// partial `.gguf` otherwise fails much later inside the native loader, as
+  /// an unreadable error on the chat screen rather than on the row just tapped.
   Future<void> _install(String id, String localPath) async {
     final model = _sources[id];
     final file = await _fileFor(id, model);
@@ -129,18 +124,22 @@ class DownloadViewModel extends Notifier<Map<String, DownloadProgress>> {
     }
 
     _put(id, DownloadCompleted(localPath));
-    await ref
-        .read(modelLibraryViewModelProvider.notifier)
-        .install(
-          ModelDescriptor.installed(
-            model: model,
-            file: file,
-            localPath: localPath,
-          ),
-        );
+    final library = ref.read(modelLibraryViewModelProvider.notifier);
+
+    // A projector is recorded against its repository rather than installed as
+    // a model of its own: it holds no weights and cannot answer anything.
+    if (file.isProjector) {
+      await library.installProjector(
+        ProjectorDescriptor.installed(file: file, localPath: localPath),
+      );
+      return;
+    }
+
+    await library.install(
+      ModelDescriptor.installed(model: model, file: file, localPath: localPath),
+    );
   }
 
-  /// The catalog's record of the file that just finished, for its expected size.
   Future<GgufFile?> _fileFor(String id, CatalogModel? model) async {
     if (model == null) return null;
     try {
@@ -176,8 +175,7 @@ class DownloadViewModel extends Notifier<Map<String, DownloadProgress>> {
     }
   }
 
-  /// Whether this file is already queued, downloading or paused — all states a
-  /// second tap must not restart.
+  /// Queued, downloading or paused — all states a second tap must not restart.
   static bool _isLive(DownloadProgress? progress) => switch (progress) {
     DownloadQueued() || Downloading() || DownloadPaused() => true,
     _ => false,

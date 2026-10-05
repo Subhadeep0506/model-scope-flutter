@@ -14,10 +14,8 @@ import '../widgets/search_field.dart';
 import '../widgets/square_icon_button.dart';
 
 /// The models this build offers, with a search field and capability filters.
-///
-/// Both of those are list operations over a manifest the app ships with, so
-/// neither typing nor filtering sends a request. The only traffic this screen
-/// makes is one stats call per card, once per app run.
+/// Both filter a shipped manifest, so the only traffic this screen makes is
+/// one stats call per card, once per app run.
 class ModelCatalogScreen extends ConsumerStatefulWidget {
   const ModelCatalogScreen({super.key});
 
@@ -90,7 +88,6 @@ class _ModelCatalogScreenState extends ConsumerState<ModelCatalogScreen> {
   }
 }
 
-/// Back button, overline and title, as drawn at the top of the mockup.
 class _Header extends StatelessWidget {
   const _Header({required this.state});
 

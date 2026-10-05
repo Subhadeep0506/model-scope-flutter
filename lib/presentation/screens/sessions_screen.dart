@@ -99,10 +99,9 @@ class _SessionList extends ConsumerWidget {
     );
   }
 
-  /// Asks before deleting, as removing a model in Settings does.
-  ///
-  /// A transcript is not recoverable once it is gone, so the decision is made
-  /// up front rather than left to a snackbar the user has to catch in time.
+  /// Asks before deleting, as removing a model in Settings does. A transcript
+  /// is not recoverable, so the decision is made up front rather than left to
+  /// a snackbar the user has to catch in time.
   Future<void> _delete(
     BuildContext context,
     WidgetRef ref,

@@ -5,20 +5,11 @@ import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 import '../models/catalog_model.dart';
 
-/// The models this build offers to download.
-abstract interface class CatalogRepository {
-  /// The curated list, in the order it should be drawn.
-  Future<List<CatalogModel>> load();
-}
-
-/// [CatalogRepository] over the `assets/catalog/models.json` manifest.
-///
-/// The manifest ships with the app, so this never touches the network and never
-/// fails for a user — which is the whole point of the curated catalog. Adding a
-/// model means editing the JSON and shipping a build.
-class AssetCatalogRepository implements CatalogRepository {
-  AssetCatalogRepository({AssetBundle? bundle})
-    : _bundle = bundle ?? rootBundle;
+/// The models this build offers to download, read from the shipped
+/// `assets/catalog/models.json`. Never touches the network and never fails for
+/// a user; adding a model means editing the JSON and shipping a build.
+class CatalogRepository {
+  CatalogRepository({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
 
   static const String assetPath = 'assets/catalog/models.json';
 
@@ -28,7 +19,7 @@ class AssetCatalogRepository implements CatalogRepository {
   /// the catalog screen rebuilds on every keystroke in its search field.
   Future<List<CatalogModel>>? _cached;
 
-  @override
+  /// The curated list, in the order it should be drawn.
   Future<List<CatalogModel>> load() => _cached ??= _read();
 
   Future<List<CatalogModel>> _read() async {
@@ -37,9 +28,6 @@ class AssetCatalogRepository implements CatalogRepository {
   }
 }
 
-/// Parsed off the UI isolate, for consistency with the Hub responses rather
-/// than because the manifest is large.
-///
 /// A malformed entry throws rather than being skipped: the file is authored in
 /// this repository, so a bad one is a build-time mistake that should be loud.
 List<CatalogModel> _decodeCatalog(String body) {

@@ -8,18 +8,13 @@ import '../../data/models/byte_size.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// What the app itself is holding on disk, and a way to let it go.
-///
-/// Deliberately excludes downloaded weights: those are gigabytes the user chose
-/// to spend, and they are removed one at a time from the Models list where the
-/// cost of each is visible. A Clear cache that silently deleted a model would
-/// be a nasty surprise on a metered connection.
+/// What the app itself is holding on disk, and a way to let it go. Downloaded
+/// weights are excluded on purpose — those are removed one at a time from the
+/// Models list, where the cost of each is visible.
 class StorageCard extends ConsumerWidget {
   const StorageCard({super.key});
 
-  /// Reference point for the bar only. There is no quota to report — the bar
-  /// exists to make a change in size legible, so it is scaled against a size
-  /// at which clearing is clearly worth doing.
+  /// Reference point for the bar only; there is no quota to report.
   static const int _barCeilingBytes = 500 * 1000 * 1000;
 
   @override

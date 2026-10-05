@@ -5,20 +5,24 @@ the Flutter binding for local GGUF inference. This is one part of a larger app, 
 tested on its own: the **Chat** area, running against a single hardcoded local model.
 
 The UI is built from the mockups in [assets/design/](assets/design/) — a sessions list, a
-transcript, and three modal sheets (Loaded models, Sampling, Attach).
+transcript, and two modal sheets (Loaded models, Sampling).
 
 ## What this part does
 
 - **Chat tab is real.** Multi-session list with search and model/date filters, create and
-  delete behind a confirmation, a streaming transcript, and the three sheets. Sessions persist
+  delete behind a confirmation, a streaming transcript, and both sheets. Sessions persist
   to shared preferences and are replayed into the model's context when a session is reopened,
   up to the number of turns set by `CHAT_MEMORY` in the Sampling sheet.
 - **Home, Agent and Settings are stubs.** They exist so the bottom navigation matches the
   design; each renders a placeholder.
 - **Tool calling is not in this part.** Deferred to a later pass.
-- **Attachments are picker-only.** Picking a PDF or image shows a chip in the composer and
-  stores the filename on the message, but the file is **not** sent to the model. The composer
-  says so in a caption, so the limitation is visible in the app rather than only here.
+- **Images go to vision models.** The composer accepts `jpg`, `jpeg` and `png`, up to three
+  per message; documents are deferred to the RAG agent. Seeing them takes a second file: a
+  model's **projector** (`mmproj-*.gguf`), downloaded from the same repository as its weights
+  in Settings → Browse models. One projector covers every quant installed from that
+  repository. Without one the image button is disabled, because the model cannot read a
+  picture and the app would only be pretending. Past images are replayed into context as
+  `[image: name]` rather than re-encoded, which keeps a 4096-token window usable.
 
 ## Get the model
 

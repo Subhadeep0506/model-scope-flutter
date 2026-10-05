@@ -26,12 +26,18 @@ enum ChatStatus {
 
 /// Everything the chat screen renders.
 class ChatState {
+  /// How many images one message may carry. Each one costs hundreds of tokens
+  /// of a context the user budgets in turns, so the composer caps it rather
+  /// than letting a question arrive with no room left to answer it.
+  static const int maxImages = 3;
+
   const ChatState({
     this.session,
     this.status = ChatStatus.idle,
     this.error,
     this.notice,
-    this.attachmentName,
+    this.attachments = const <String>[],
+    this.hasVision = false,
   });
 
   final ChatSession? session;
@@ -41,14 +47,16 @@ class ChatState {
   /// actionable card. Per-reply failures live on the message instead.
   final String? error;
 
-  /// A line about how the model loaded, when it did not load the way it was
-  /// asked to — currently only the CPU fallback. Unlike [error] the chat is
-  /// usable, so this is a caption beside the model strip rather than a card.
+  /// A line about how the model loaded, when it did not load as asked —
+  /// currently only the CPU fallback. The chat stays usable, unlike [error].
   final String? notice;
 
-  /// A picked file waiting in the composer. Recorded on the next message for
-  /// display only — the model is text-only and never receives it.
-  final String? attachmentName;
+  /// Images waiting in the composer, as paths into the app's own storage.
+  /// They go out with the next message and the composer then clears.
+  final List<String> attachments;
+
+  /// Whether the loaded model has a projector and can therefore read images.
+  final bool hasVision;
 
   List<ChatMessage> get messages => session?.messages ?? const <ChatMessage>[];
 
@@ -59,12 +67,16 @@ class ChatState {
   /// The composer only accepts input once the weights are in memory.
   bool get canSend => status == ChatStatus.ready;
 
+  /// Whether another image can be picked. A model without a projector cannot
+  /// read one, so the composer offers nothing rather than taking a picture it
+  /// would have to throw away.
+  bool get canAttach => canSend && hasVision && attachments.length < maxImages;
+
   /// Regenerate needs a finished reply to replace.
   bool get canRegenerate =>
       canSend && messages.isNotEmpty && !messages.last.isUser;
 
   /// Throughput of the most recent reply, shown in the Loaded models sheet.
-  /// `null` until this session has produced one.
   GenerationMetrics? get lastMetrics {
     for (var i = messages.length - 1; i >= 0; i--) {
       final metrics = messages[i].metrics;
@@ -78,17 +90,19 @@ class ChatState {
     ChatStatus? status,
     String? error,
     String? notice,
-    String? attachmentName,
+    List<String>? attachments,
+    bool? hasVision,
     bool clearError = false,
     bool clearNotice = false,
-    bool clearAttachment = false,
+    bool clearAttachments = false,
   }) => ChatState(
     session: session ?? this.session,
     status: status ?? this.status,
     error: clearError ? null : (error ?? this.error),
     notice: clearNotice ? null : (notice ?? this.notice),
-    attachmentName: clearAttachment
-        ? null
-        : (attachmentName ?? this.attachmentName),
+    attachments: clearAttachments
+        ? const <String>[]
+        : (attachments ?? this.attachments),
+    hasVision: hasVision ?? this.hasVision,
   );
 }

@@ -4,13 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// Reads and writes one JSON document on disk.
-///
-/// Writes go to a temporary file that is then renamed over the real one, so an
-/// interrupted write cannot leave a half-written document behind.
-///
-/// Encoding and decoding run on [compute] because a transcript grows without
-/// bound and parsing it on the UI isolate would eventually drop frames.
+/// Reads and writes one JSON document on disk. Writes go to a temporary file
+/// renamed over the real one, so an interrupted write cannot leave half a
+/// document behind. Encoding and decoding run on [compute].
 class JsonFileStore {
   const JsonFileStore({required this.directory, required this.fileName});
 
@@ -41,12 +37,9 @@ class JsonFileStore {
     }
   }
 
-  /// Writes [data] over the stored document's matching top-level keys, leaving
-  /// every other key untouched.
-  ///
-  /// Several repositories share `settings.json`. A plain [write] from one of
-  /// them would drop the others' keys, so anything sharing a file must use
-  /// this instead.
+  /// Writes [data] over matching top-level keys, leaving the rest untouched.
+  /// Several repositories share `settings.json`, and a plain [write] from one
+  /// of them would drop the others' keys.
   Future<void> merge(Map<String, dynamic> data) async {
     final existing = await read() ?? <String, dynamic>{};
     await write(<String, dynamic>{...existing, ...data});
