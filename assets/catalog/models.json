@@ -1,48 +1,18 @@
 [
   {
     "repo_id": "empero-ai/Qwen3.8-2B-Distill-GGUF",
-    "name": "Qwen3.8-2B",
-    "description": "Distilled version of Qwen3.8 optimized for efficiency.",
+    "name": "Qwen3.8 2B Distill",
+    "description": "A reasoning model distilled from Qwen3.8 2.4T into the Qwen3.5 2B architecture. Thinks before answering; needs a llama.cpp build with Gated DeltaNet support.",
     "param_label": "2B",
-    "capabilities": [
-      "text_to_text",
-      "tool_calling"
-    ]
-  },
-  {
-    "repo_id": "LiquidAI/LFM2.5-230M-GGUF",
-    "name": "LFM2.5 230M",
-    "description": "LFM2 is a new generation of hybrid models developed by Liquid AI, specifically designed for edge AI and on-device deployment. It sets a new standard in terms of quality, speed, and memory efficiency.",
-    "param_label": "230M",
     "capabilities": [
       "text_to_text"
     ]
   },
   {
-    "repo_id": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
-    "name": "LFM2.5 1.2B Instruct",
-    "description": "LFM2.5 is a new family of hybrid models designed for on-device deployment. It builds on the LFM2 architecture with extended pre-training and reinforcement learning.",
-    "param_label": "1.2B",
-    "capabilities": [
-      "text_to_text",
-      "tool_calling"
-    ]
-  },
-  {
     "repo_id": "Qwen/Qwen3-0.6B-GGUF",
     "name": "Qwen3 0.6B",
-    "description": "General-purpose small model balancing instruction quality and local speed.",
+    "description": "The smallest Qwen3. Switches between a thinking mode for hard problems and a direct mode for everyday chat, and is multilingual throughout.",
     "param_label": "0.6B",
-    "capabilities": [
-      "text_to_text",
-      "tool_calling"
-    ]
-  },
-  {
-    "repo_id": "tencent/Hy-MT2-1.8B-GGUF",
-    "name": "Hy-MT2 1.8B",
-    "description": "Hy-MT2 is a family of “fast-thinking” multilingual translation models designed for complex real-world scenarios.",
-    "param_label": "1.8B",
     "capabilities": [
       "text_to_text",
       "tool_calling"
@@ -51,80 +21,225 @@
   {
     "repo_id": "unsloth/Qwen3.5-2B-GGUF",
     "name": "Qwen3.5 2B",
-    "description": "Qwen3.5 is a versatile vision-language model capable of understanding and generating text based on image inputs.",
+    "description": "Vision and language in one model, trained together from the start rather than bolted on. Covers 201 languages; needs a recent llama.cpp build.",
     "param_label": "2B",
     "capabilities": [
+      "text_to_text",
       "image_to_text",
-      "text_to_text"
+      "tool_calling"
     ]
   },
   {
     "repo_id": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
     "name": "Qwen2.5 1.5B Instruct",
-    "description": "Qwen2.5 is a versatile instruction-following model optimized for both text and image understanding.",
+    "description": "A dependable text-only all-rounder from the Qwen2.5 generation, good at following instructions and producing structured output such as JSON.",
     "param_label": "1.5B",
     "capabilities": [
-      "image_to_text",
-      "text_to_text"
-    ]
-  },
-  {
-    "repo_id": "openbmb/MiniCPM5-2B-GGUF",
-    "name": "MiniCPM5 2B",
-    "description": "MiniCPM5 is a compact and efficient model designed for on-device deployment, balancing performance and resource usage.",
-    "param_label": "2B",
-    "capabilities": [
-      "image_to_text",
-      "text_to_text"
+      "text_to_text",
+      "tool_calling"
     ]
   },
   {
     "repo_id": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
     "name": "Qwen2.5 0.5B Instruct",
-    "description": "Qwen2.5 is a versatile instruction-following model optimized for both text and image understanding.",
+    "description": "The lightest Qwen2.5 instruct model. Text only, and small enough to stay responsive on modest hardware.",
     "param_label": "0.5B",
     "capabilities": [
-      "image_to_text",
-      "text_to_text"
+      "text_to_text",
+      "tool_calling"
     ]
   },
   {
     "repo_id": "unsloth/Qwen3.5-0.8B-GGUF",
     "name": "Qwen3.5 0.8B",
-    "description": "Qwen3.5 is a versatile vision-language model capable of understanding and generating text based on image inputs.",
+    "description": "The compact Qwen3.5. Reads images as well as text at a size that suits a phone; needs a recent llama.cpp build.",
     "param_label": "0.8B",
     "capabilities": [
+      "text_to_text",
       "image_to_text",
-      "text_to_text"
-    ]
-  },
-  {
-    "repo_id": "ggml-org/gemma-3-1b-it-GGUF",
-    "name": "Gemma 3 1B IT",
-    "description": "Gemma 3 is an Italian language model with 1 billion parameters, optimized for text understanding and generation.",
-    "param_label": "1B",
-    "capabilities": [
-      "image_to_text",
-      "text_to_text"
-    ]
-  },
-  {
-    "repo_id": "MaziyarPanahi/Llama-3.2-1B-Instruct-GGUF",
-    "name": "Llama 3.2 1B Instruct",
-    "description": "Llama 3.2 is a versatile instruction-following model optimized for both text and image understanding.",
-    "param_label": "1B",
-    "capabilities": [
-      "image_to_text",
-      "text_to_text"
+      "tool_calling"
     ]
   },
   {
     "repo_id": "Qwen/Qwen3-VL-2B-Instruct-GGUF",
     "name": "Qwen3 VL 2B Instruct",
-    "description": "Qwen3 VL is a versatile vision-language model optimized for both text and image understanding.",
+    "description": "Qwen3's dedicated vision model. Strong on reading text in images, documents and charts, and answers directly without a reasoning pass.",
     "param_label": "2B",
     "capabilities": [
+      "text_to_text",
       "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "unsloth/Qwen3.5-0.8B-MTP-GGUF",
+    "name": "Qwen3.5 0.8B MTP",
+    "description": "Qwen3.5 0.8B shipped with multi-token prediction heads, which roughly halve generation time where the runtime supports them.",
+    "param_label": "0.8B",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "unsloth/Qwen3-VL-2B-Thinking-GGUF",
+    "name": "Qwen3 VL 2B Thinking",
+    "description": "The reasoning counterpart to Qwen3 VL 2B. Works through a problem before replying, which helps on multi-step visual and maths questions.",
+    "param_label": "2B",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "LiquidAI/LFM2.5-230M-GGUF",
+    "name": "LFM2.5 230M",
+    "description": "A hybrid architecture from Liquid AI built for edge devices. Tiny and quick, with a quantisation-aware build that holds up well at 4-bit.",
+    "param_label": "230M",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+    "name": "LFM2.5 1.2B Instruct",
+    "description": "The instruction-tuned LFM2.5, extended with further pre-training and reinforcement learning. Multilingual and still sized for a phone.",
+    "param_label": "1.2B",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "LiquidAI/LFM2.5-VL-450M-GGUF",
+    "name": "LFM2.5 VL 450M",
+    "description": "Liquid AI's smallest vision model. Describes and answers questions about images at a size few vision models reach.",
+    "param_label": "450M",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+    "name": "LFM2.5 VL 1.6B",
+    "description": "The larger LFM2.5 vision model, trading some speed for noticeably better image understanding. Multilingual.",
+    "param_label": "1.6B",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "ggml-org/MiniCPM-V-4.6-GGUF",
+    "name": "MiniCPM V 4.6",
+    "description": "A SigLIP2 vision encoder on a Qwen3.5 0.8B base. Handles single images, several at once, and video, and compresses visual tokens to stay fast.",
+    "param_label": "1.3B",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "openbmb/MiniCPM5-2B-GGUF",
+    "name": "MiniCPM5 2B",
+    "description": "A dense 2B built for on-device use, at its best on code, maths, long documents and agent-style tool use. Text only despite the MiniCPM name.",
+    "param_label": "2B",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "ggml-org/SmolVLM2-256M-Video-Instruct-GGUF",
+    "name": "SmolVLM2 256M Video Instruct",
+    "description": "About the smallest model that can look at an image or a video and describe it. A size test more than a quality one.",
+    "param_label": "256M",
+    "capabilities": [
+      "text_to_text",
+      "image_to_text"
+    ]
+  },
+  {
+    "repo_id": "ggml-org/gemma-3-1b-it-GGUF",
+    "name": "Gemma 3 1B IT",
+    "description": "Google's instruction-tuned Gemma 3 at 1B, with a 32K context. Text only — vision starts at the 4B size in this family.",
+    "param_label": "1B",
+    "capabilities": [
+      "text_to_text"
+    ]
+  },
+  {
+    "repo_id": "unsloth/gemma-3-270m-it-GGUF",
+    "name": "Gemma 3 270M IT",
+    "description": "The smallest Gemma 3, instruction-tuned. Meant as a base to fine-tune for one narrow job rather than as a general assistant.",
+    "param_label": "270M",
+    "capabilities": [
+      "text_to_text"
+    ]
+  },
+  {
+    "repo_id": "unsloth/functiongemma-270m-it-GGUF",
+    "name": "FunctionGemma 270M IT",
+    "description": "A Gemma 3 270M trained purely to call functions. Google intend it to be fine-tuned for a specific tool set; it is not meant for conversation.",
+    "param_label": "270M",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "unsloth/granite-4.0-350m-GGUF",
+    "name": "Granite 4.0 350M",
+    "description": "IBM's Granite 4.0 Nano, instruction-tuned for on-device work. Follows instructions closely and calls tools with an OpenAI-style schema.",
+    "param_label": "350M",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "unsloth/Qwen2.5-Coder-0.5B-Instruct-128K-GGUF",
+    "name": "Qwen2.5 Coder 0.5B Instruct 128K",
+    "description": "Qwen2.5 trained on code, in its smallest size, with the context stretched to 128K so a whole file fits in one go.",
+    "param_label": "0.5B",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "unsloth/Qwen2.5-Coder-1.5B-Instruct-128K-GGUF",
+    "name": "Qwen2.5 Coder 1.5B Instruct 128K",
+    "description": "The 1.5B Qwen2.5 Coder with a 128K context. Markedly better at generating and explaining code than the 0.5B, for roughly three times the size.",
+    "param_label": "1.5B",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "MaziyarPanahi/Llama-3.2-1B-Instruct-GGUF",
+    "name": "Llama 3.2 1B Instruct",
+    "description": "Meta's 1B, tuned for multilingual dialogue, summarising and retrieval. Text only — the vision Llama 3.2 models start at 11B.",
+    "param_label": "1B",
+    "capabilities": [
+      "text_to_text",
+      "tool_calling"
+    ]
+  },
+  {
+    "repo_id": "tencent/Hy-MT2-1.8B-GGUF",
+    "name": "Hy-MT2 1.8B",
+    "description": "Tencent's translation specialist, covering 33 languages and taking instructions about how to translate. Not a general-purpose chat model.",
+    "param_label": "1.8B",
+    "capabilities": [
       "text_to_text"
     ]
   }

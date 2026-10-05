@@ -143,15 +143,27 @@ class ModelDownloader {
     await _downloader.resumeFromBackground();
   }
 
+  /// Whether reading [status] should be followed by putting the system prompt
+  /// up.
+  ///
+  /// Anything short of granted is asked for. Android reports a permission it
+  /// has never asked about as [PermissionStatus.denied], not
+  /// [PermissionStatus.undetermined] — that value only ever comes back from
+  /// iOS — so testing for undetermined means never asking at all. Asking when
+  /// the answer is already a firm no costs nothing: the platform returns it
+  /// without drawing a dialog, and Android stops drawing one after two
+  /// refusals.
+  static bool shouldRequestNotifications(PermissionStatus status) =>
+      status != PermissionStatus.granted;
+
   Future<void> askToNotify() async {
     if (_askedToNotify) return;
     _askedToNotify = true;
     try {
       final permissions = _downloader.permissions;
-      if (await permissions.status(PermissionType.notifications) ==
-          PermissionStatus.undetermined) {
-        await permissions.request(PermissionType.notifications);
-      }
+      final status = await permissions.status(PermissionType.notifications);
+      if (!shouldRequestNotifications(status)) return;
+      await permissions.request(PermissionType.notifications);
     } catch (error) {
       developer.log('Notification permission', name: _logName, error: error);
     }
