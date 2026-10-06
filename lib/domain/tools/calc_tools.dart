@@ -1,22 +1,9 @@
-/// The tools that need nothing but the device: arithmetic, date arithmetic and
-/// unit conversion.
-///
-/// They matter out of proportion to their size. Every other tool in this build
-/// needs an API key, so without these a fresh install cannot run an agent at
-/// all — and these three are also the cleanest probe of the thing this app
-/// exists to measure, because a wrong answer is unambiguous. A model that
-/// claims `17 * 24 = 418` has failed in a way no web search result can argue
-/// with.
-///
-/// Each follows the same rules as the web tools: one required named `String`,
-/// never throws, and returns a sentence the model can read.
 library;
 
 import 'dart:math' as math;
 
 import 'tool_definition.dart';
 
-/// Works out an arithmetic expression.
 ToolDefinition calculatorTool() {
   String run({required String expression}) {
     try {
@@ -42,7 +29,6 @@ ToolDefinition calculatorTool() {
   );
 }
 
-/// Adds to or subtracts from a date, or measures the gap between two.
 ToolDefinition dateMathTool({DateTime Function()? now}) {
   final clock = now ?? DateTime.now;
 
@@ -70,7 +56,6 @@ ToolDefinition dateMathTool({DateTime Function()? now}) {
   );
 }
 
-/// Converts a measurement from one unit to another.
 ToolDefinition unitConvertTool() {
   String run({required String expression}) {
     try {
@@ -95,11 +80,6 @@ ToolDefinition unitConvertTool() {
   );
 }
 
-// ---------------------------------------------------------------- arithmetic
-
-/// Splits [input] into numbers, operators and brackets. Anything else is
-/// refused here rather than being silently dropped, so `5 apples + 3` is an
-/// error instead of quietly becoming `5 + 3`.
 List<String> _tokenize(String input) {
   final tokens = <String>[];
   final pattern = RegExp(r'\d*\.?\d+|[-+*/^()]');
@@ -132,9 +112,6 @@ double _evaluate(String input) {
   return value;
 }
 
-/// A recursive-descent parser over the token list: sums, then products, then
-/// powers, then single values. Each level consumes only what binds tighter
-/// than it, which is what gives `2 + 3 * 4` the value 14 rather than 20.
 class _ExpressionParser {
   _ExpressionParser(this._tokens);
 
@@ -174,14 +151,11 @@ class _ExpressionParser {
     return value;
   }
 
-  /// Right-associative, so `2^3^2` is 2^9 and not 8^2.
   double _power() {
     final base = _value();
     if (_peek != '^') return base;
     _at++;
 
-    // A fractional power of a negative number has no real answer, and `pow`
-    // reports that as NaN rather than raising.
     final result = math.pow(base, _power()).toDouble();
     if (result.isNaN) {
       throw const FormatException('that power has no real answer');
@@ -218,8 +192,6 @@ class _ExpressionParser {
   }
 }
 
-/// Prints a result without a trailing `.0`, and without fifteen decimals of
-/// floating-point noise.
 String _formatNumber(double value) {
   if (value == value.roundToDouble() && value.abs() < 1e15) {
     return value.toStringAsFixed(0);
@@ -228,9 +200,6 @@ String _formatNumber(double value) {
   return rounded.toString();
 }
 
-// --------------------------------------------------------------------- dates
-
-/// `days between A and B`, or `A + n units`, or just a date.
 String _dateAnswer(String input, DateTime now) {
   final text = input.trim().toLowerCase();
   if (text.isEmpty) {
@@ -268,8 +237,6 @@ String _shiftAnswer(RegExpMatch shift, DateTime now) {
       '${shift.group(4)}s is ${_formatDate(moved)}';
 }
 
-/// `today`, `tomorrow`, `yesterday` or an ISO date. Time of day is dropped —
-/// every question this tool answers is about whole days.
 DateTime _parseDate(String text, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
   final trimmed = text.trim();
@@ -299,10 +266,6 @@ String _formatDate(DateTime date) =>
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
 
-// --------------------------------------------------------------------- units
-
-/// One unit, as a multiple of its dimension's base unit — metre, kilogram,
-/// litre. Temperature is not a multiple of anything, so it is handled apart.
 typedef _Unit = ({String dimension, double factor, String name});
 
 const Map<String, _Unit> _units = <String, _Unit>{
@@ -328,7 +291,6 @@ const Map<String, _Unit> _units = <String, _Unit>{
   'k': (dimension: 'temperature', factor: 1, name: 'kelvin'),
 };
 
-/// The spellings a model is likely to write, mapped onto the table's keys.
 const Map<String, String> _unitAliases = <String, String>{
   'millimeter': 'mm',
   'millimetre': 'mm',
@@ -392,8 +354,6 @@ String _convertAnswer(String input) {
   return '$amount ${from.name} is ${_formatNumber(result)} ${to.name}';
 }
 
-/// The table entry for [text], after stripping a plural and a degree sign and
-/// trying the alias list.
 _Unit _unitNamed(String text) {
   final cleaned = text.toLowerCase().replaceAll('°', '').trim();
   final candidates = <String>[
@@ -412,8 +372,6 @@ _Unit _unitNamed(String text) {
   throw FormatException('"$text" is not a unit this tool knows');
 }
 
-/// Through Celsius, which keeps three scales to two conversions each rather
-/// than six.
 double _convertTemperature(double amount, String from, String to) {
   final fromKey = _unitKey(from);
   final toKey = _unitKey(to);

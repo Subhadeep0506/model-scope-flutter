@@ -115,6 +115,11 @@ class NobodyWhoLlmService implements LlmService {
   }
 
   @override
+  Future<void> setThinking(bool enabled) async {
+    await _chat?.setTemplateVariable('enable_thinking', enabled);
+  }
+
+  @override
   Future<void> restoreHistory(List<ChatMessage> messages) async {
     final chat = _chat;
     if (chat == null) return;

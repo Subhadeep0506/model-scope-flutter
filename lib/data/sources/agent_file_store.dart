@@ -4,21 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// A directory of JSON documents, one per custom agent.
-///
-/// [JsonFileStore] holds a single document and is the right shape for settings
-/// or a session list; an agent is its own file so that it can be exported,
-/// shared or hand-edited on its own, and so that one corrupt agent cannot cost
-/// the user the others. Writes use the same temporary-file-then-rename as
-/// [JsonFileStore], so an interrupted write cannot leave half a document
-/// behind.
 class AgentFileStore {
   const AgentFileStore({required this.directory, this.folderName = 'agents'});
-
-  /// The app's documents directory. The store keeps its files in
-  /// [folderName] inside it.
   final Directory directory;
-
   final String folderName;
 
   Directory get _folder =>
@@ -27,11 +15,6 @@ class AgentFileStore {
   File _fileFor(String id) =>
       File('${_folder.path}${Platform.pathSeparator}$id.json');
 
-  /// Every document in the folder, by file name without the extension.
-  ///
-  /// A file that will not parse is logged and skipped rather than throwing:
-  /// these are written by the app but edited by anyone, and one bad file must
-  /// not empty the Agent bench.
   Future<Map<String, Map<String, dynamic>>> readAll() async {
     final folder = _folder;
     if (!await folder.exists()) return <String, Map<String, dynamic>>{};
@@ -65,8 +48,6 @@ class AgentFileStore {
     }
   }
 
-  /// Writes [document] as `<id>.json`, replacing any file already there.
-  /// Returns whether it was written.
   Future<bool> write(String id, Map<String, dynamic> document) async {
     try {
       final folder = _folder;
@@ -88,8 +69,6 @@ class AgentFileStore {
     }
   }
 
-  /// Removes `<id>.json`. A file that is not there is not an error — deleting
-  /// an agent twice should settle, not throw.
   Future<void> delete(String id) async {
     try {
       final file = _fileFor(id);
@@ -110,7 +89,5 @@ class AgentFileStore {
 
 Object? _decode(String raw) => jsonDecode(raw);
 
-/// Indented, because these files are meant to be readable: a user exporting an
-/// agent or looking at one on a desktop should see something they can edit.
 String _encode(Map<String, dynamic> document) =>
     const JsonEncoder.withIndent('  ').convert(document);

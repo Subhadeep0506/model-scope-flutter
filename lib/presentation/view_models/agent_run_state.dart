@@ -2,31 +2,15 @@ import '../../data/models/agent_log.dart';
 import '../../data/models/agent_run.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/repositories/agent_repository.dart';
+import '../../domain/services/thinking_parser.dart';
 
-/// Where the agent detail screen is in a run.
 enum AgentRunStatus {
-  /// Reading the agent and its history. The screen shows a spinner.
   loading,
-
-  /// Ready to run: description, model, inputs and the run button.
   idle,
-
-  /// Something stops it running — no model, no key, a broken template. Same
-  /// screen as [idle] with the run button disabled and the reason under it.
   blocked,
-
-  /// Loading the weights. This is the only point at which a model is loaded;
-  /// opening the screen loads nothing.
   preparing,
-
-  /// Walking the pipeline. The trace fills in and the answer streams.
   running,
-
-  /// The run ended. Trace and output stay on screen until the user leaves or
-  /// runs again.
   finished,
-
-  /// The agent could not be opened at all.
   failed,
 }
 
@@ -44,6 +28,7 @@ class AgentRunState {
     this.output = '',
     this.notice,
     this.error,
+    this.toolWarning,
     this.history = const <AgentRun>[],
     this.viewing,
   });
@@ -82,6 +67,11 @@ class AgentRunState {
   /// Why the run stopped, or why the agent could not be opened.
   final String? error;
 
+  /// That the chosen model is not marked as able to call tools. A warning
+  /// rather than a blocker: watching a model fail to reach for a tool is a
+  /// legitimate thing to want to see here.
+  final String? toolWarning;
+
   /// This agent's past runs, newest first.
   final List<AgentRun> history;
 
@@ -117,7 +107,16 @@ class AgentRunState {
   List<TraceEntry> get visibleTrace => viewing?.trace ?? trace;
 
   /// The text on screen, from the same two sources as [visibleTrace].
-  String get visibleOutput => viewing?.output ?? output;
+  ///
+  /// Stripped of any reasoning block. The tokens arrive raw so the screen can
+  /// fill in as they stream — the same arrangement Chat uses — but an agent
+  /// shows the answer alone. The reasoning is in the run log for anyone who
+  /// wants it.
+  String get visibleOutput => splitThinking(viewing?.output ?? output).answer;
+
+  /// Whether the model is still inside a reasoning block, which is what puts
+  /// `Thinking…` on the output card instead of `Writing…`.
+  bool get isThinking => isRunning && splitThinking(output).isOpen;
 
   /// `4.20s total`, printed opposite the TRACE heading.
   String get traceTotalLabel {
@@ -139,11 +138,13 @@ class AgentRunState {
     String? output,
     String? notice,
     String? error,
+    String? toolWarning,
     List<AgentRun>? history,
     AgentRun? viewing,
     bool clearNotice = false,
     bool clearError = false,
     bool clearViewing = false,
+    bool clearToolWarning = false,
   }) => AgentRunState(
     agent: agent ?? this.agent,
     status: status ?? this.status,
@@ -156,6 +157,7 @@ class AgentRunState {
     output: output ?? this.output,
     notice: clearNotice ? null : notice ?? this.notice,
     error: clearError ? null : error ?? this.error,
+    toolWarning: clearToolWarning ? null : toolWarning ?? this.toolWarning,
     history: history ?? this.history,
     viewing: clearViewing ? null : viewing ?? this.viewing,
   );

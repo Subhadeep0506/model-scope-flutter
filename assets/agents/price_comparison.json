@@ -5,7 +5,7 @@
   "purpose": "Compare prices for a product across retailers",
   "description": "Searches the web for a product, reads the most promising retailer page, normalises price and shipping, then ranks what it found. Tests web search, scraping and numeric reasoning in one run.",
   "icon": "tag",
-  "system_prompt": "You are a careful shopping assistant. Use only prices the tools actually returned — never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
+  "system_prompt": "You are a smart shopping assistant. Use only prices the tools actually returned - never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
   "inputs": [
     {
       "name": "product",
@@ -42,7 +42,7 @@
       "id": "offers",
       "kind": "reason",
       "reads": ["step.search", "step.page"],
-      "prompt": "List every retailer you have a price for, one per line, as: retailer — price — shipping — stock. Write 'not stated' for anything the material does not give. Do not invent a figure."
+      "prompt": "List every retailer you have a price for, one per line, as: retailer -> price -> shipping -> stock. Write 'NA' for anything the material does not give. Do not invent a figure."
     }
   ],
   "answer": {

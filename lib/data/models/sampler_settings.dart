@@ -31,6 +31,12 @@ class SamplerSettings {
   static const int defaultHistoryTurns = _historyTurns;
   static const String defaultSystemPrompt = _systemPrompt;
 
+  /// What an agent run samples at, whatever the Chat sliders say. Low because
+  /// a step is instruction-following — call this tool, with these arguments —
+  /// and because two runs of one agent should differ for reasons to do with
+  /// the model rather than the sampler.
+  static const double agentTemperature = 0.2;
+
   /// Slider ranges, also from the mockup.
   static const (double, double) temperatureRange = (0.0, 2.0);
   static const (double, double) topPRange = (0.0, 1.0);
@@ -60,6 +66,10 @@ class SamplerSettings {
     historyTurns: historyTurns ?? this.historyTurns,
     systemPrompt: systemPrompt ?? this.systemPrompt,
   );
+
+  /// These settings as an agent run uses them. Everything else is the user's,
+  /// so a wider context or a longer answer still follows what they chose.
+  SamplerSettings forAgentRun() => copyWith(temperature: agentTemperature);
 
   Map<String, dynamic> toJson() => _$SamplerSettingsToJson(this);
 

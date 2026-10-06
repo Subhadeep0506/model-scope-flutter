@@ -212,6 +212,11 @@ class _Body extends ConsumerWidget {
           SizedBox(height: metrics.gapMd),
           _Blocker(text: state.error ?? ''),
         ],
+        if (!state.showsRun)
+          if (state.toolWarning case final warning?) ...<Widget>[
+            SizedBox(height: metrics.gapMd),
+            _Blocker(text: warning),
+          ],
         if (state.notice case final notice?) ...<Widget>[
           SizedBox(height: metrics.gapMd),
           _Notice(text: notice),
@@ -230,6 +235,7 @@ class _Body extends ConsumerWidget {
           AgentOutputCard(
             text: state.visibleOutput,
             isStreaming: state.isRunning,
+            isThinking: state.isThinking,
             error: state.viewing?.error ?? state.error,
           ),
         ],

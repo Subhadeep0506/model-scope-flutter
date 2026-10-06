@@ -1,5 +1,3 @@
-/// A reply split into the model's reasoning and the answer it settled on.
-/// [isOpen] is true while a `<think>` block has been opened but not closed.
 typedef ThoughtSplit = ({String thinking, String answer, bool isOpen});
 
 const String _openTag = '<think>';

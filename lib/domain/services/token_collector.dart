@@ -1,8 +1,5 @@
 import '../../data/models/generation_metrics.dart';
 
-/// Accumulates a reply while measuring what `nobodywho` does not report:
-/// latency, throughput and token count, timed as the stream is drained. The
-/// same counter enforces the `MAX_TOKENS` slider, which the sampler API lacks.
 class TokenCollector {
   TokenCollector({required this.maxTokens, Stopwatch? clock})
     : _clock = clock ?? Stopwatch() {
@@ -23,8 +20,6 @@ class TokenCollector {
   /// True once [maxTokens] tokens have arrived.
   bool get isFull => _tokens >= maxTokens;
 
-  /// Records one token. Returns `false` when the cap has been reached and the
-  /// caller should stop generation.
   bool add(String token) {
     if (_tokens == 0) _latencyMs = _clock.elapsedMilliseconds;
     _tokens++;
@@ -37,8 +32,6 @@ class TokenCollector {
     _clock.stop();
     final total = _clock.elapsedMilliseconds;
 
-    // Time spent generating excludes the wait for the first token, so a slow
-    // prompt ingestion does not drag the throughput figure down.
     final generating = total - _latencyMs;
     final window = generating > 0 ? generating : total;
 

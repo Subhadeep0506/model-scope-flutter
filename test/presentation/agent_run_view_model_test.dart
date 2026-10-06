@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:model_scope_flutter/config/di/view_models.dart';
 import 'package:model_scope_flutter/data/models/agent_run.dart';
+import 'package:model_scope_flutter/data/models/agent_template.dart';
 import 'package:model_scope_flutter/data/models/app_settings.dart';
+import 'package:model_scope_flutter/data/models/catalog_model.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
+import 'package:model_scope_flutter/data/models/sampler_settings.dart';
 import 'package:model_scope_flutter/data/repositories/agent_repository.dart';
 import 'package:model_scope_flutter/presentation/view_models/agent_run_state.dart';
 import 'package:model_scope_flutter/presentation/view_models/agent_run_view_model.dart';
@@ -21,6 +24,9 @@ void main() {
     List<ModelDescriptor>? models,
     List<AgentRun>? runs,
     AppSettings? appSettings,
+    SamplerSettings? sampler,
+    AgentTemplate? template,
+    FakeCatalogRepository? catalog,
     List<String> needingKeys = const <String>[],
   }) {
     llm = FakeLlmService();
@@ -29,6 +35,7 @@ void main() {
       overrides: fakeOverrides(
         llm: llm,
         sessions: FakeSessionRepository(),
+        settings: FakeSettingsRepository(sampler ?? const SamplerSettings()),
         library: FakeModelLibraryRepository.of(
           models ?? <ModelDescriptor>[fakeInstalledModel()],
         ),
@@ -36,10 +43,13 @@ void main() {
           appSettings ?? const AppSettings(),
         ),
         agents: FakeAgentRepository(<Agent>[
-          Agent(template: fakeAgentTemplate(), isBuiltIn: true),
+          Agent(template: template ?? fakeAgentTemplate(), isBuiltIn: true),
         ]),
         agentRuns: history,
         tools: fakeToolRegistry(needingKeys: needingKeys),
+        // The shared default is text-only and shares a repository id with the
+        // default installed model, which would warn in every test here.
+        catalog: catalog ?? toolCapableCatalog(),
       ),
     );
   }
@@ -119,6 +129,117 @@ void main() {
       check(stateOf(container).error).isNotNull().contains('web_search key');
     });
 
+    test('warns when the model is not marked for tool calling', () async {
+      final container = containerWith(
+        models: <ModelDescriptor>[
+          fakeInstalledModel(repoId: 'ggml-org/gemma-3-1b-it-GGUF'),
+        ],
+        catalog: FakeCatalogRepository(
+          models: <CatalogModel>[
+            fakeCatalogModel(
+              repoId: 'ggml-org/gemma-3-1b-it-GGUF',
+              name: 'Gemma 3 1B',
+              capabilities: const <ModelCapability>[ModelCapability.textToText],
+            ),
+          ],
+        ),
+      );
+
+      await notifierOf(container).open('test_agent');
+
+      // A warning, not a blocker: watching a model fail to reach for a tool
+      // is a legitimate thing to want to see here.
+      check(stateOf(container).toolWarning)
+          .isNotNull()
+          .contains('Gemma 3 1B is not marked as tool-calling');
+      check(stateOf(container).status).equals(AgentRunStatus.idle);
+      check(stateOf(container).canRun).isTrue();
+    });
+
+    test('a tool-calling model draws no warning', () async {
+      final container = containerWith();
+
+      await notifierOf(container).open('test_agent');
+
+      check(stateOf(container).toolWarning).isNull();
+    });
+
+    test('an agent that names no tools is never warned about', () async {
+      final container = containerWith(
+        template: fakeAgentTemplate(
+          pipeline: const <PipelineStep>[
+            PipelineStep(
+              id: 'think',
+              kind: StepKind.reason,
+              prompt: 'Think about {{input.query}}.',
+            ),
+          ],
+        ),
+        models: <ModelDescriptor>[
+          fakeInstalledModel(repoId: 'ggml-org/gemma-3-1b-it-GGUF'),
+        ],
+        catalog: FakeCatalogRepository(
+          models: <CatalogModel>[
+            fakeCatalogModel(
+              repoId: 'ggml-org/gemma-3-1b-it-GGUF',
+              capabilities: const <ModelCapability>[ModelCapability.textToText],
+            ),
+          ],
+        ),
+      );
+
+      await notifierOf(container).open('test_agent');
+
+      check(stateOf(container).toolWarning).isNull();
+    });
+
+    test('switching to a capable model clears the warning', () async {
+      final container = containerWith(
+        models: <ModelDescriptor>[
+          fakeInstalledModel(repoId: 'ggml-org/gemma-3-1b-it-GGUF'),
+          fakeInstalledModel(
+            repoId: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+            fileName: 'qwen.gguf',
+          ),
+        ],
+        catalog: FakeCatalogRepository(
+          models: <CatalogModel>[
+            fakeCatalogModel(
+              repoId: 'ggml-org/gemma-3-1b-it-GGUF',
+              capabilities: const <ModelCapability>[ModelCapability.textToText],
+            ),
+            fakeCatalogModel(
+              repoId: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+              capabilities: const <ModelCapability>[
+                ModelCapability.textToText,
+                ModelCapability.toolCalling,
+              ],
+            ),
+          ],
+        ),
+      );
+      await notifierOf(container).open('test_agent');
+      check(stateOf(container).toolWarning).isNotNull();
+
+      await notifierOf(container)
+          .selectModel(stateOf(container).installed[1].id);
+
+      check(stateOf(container).toolWarning).isNull();
+    });
+
+    test('a model the catalog does not list is not warned about', () async {
+      // Sideloaded, or installed by an older build. This cannot tell "cannot
+      // call tools" from "unknown", so it says nothing.
+      final container = containerWith(
+        models: <ModelDescriptor>[fakeInstalledModel(repoId: 'someone/else')],
+        catalog: FakeCatalogRepository(models: <CatalogModel>[]),
+      );
+
+      await notifierOf(container).open('test_agent');
+
+      check(stateOf(container).toolWarning).isNull();
+    });
+
     test('an agent that is not there says so', () async {
       final container = containerWith();
 
@@ -133,6 +254,7 @@ void main() {
     test('loads the model once, then walks the pipeline', () async {
       final container = containerWith();
       await notifierOf(container).open('test_agent');
+      llm.scriptedToolCalls = toolCalledOn();
 
       await notifierOf(container).run();
       await pumpEventQueue();
@@ -141,6 +263,35 @@ void main() {
       // One ask for the tool step, one for the answer.
       check(llm.prompts).length.equals(2);
       check(stateOf(container).status).equals(AgentRunStatus.finished);
+    });
+
+    test('a step that skips its tool is asked again', () async {
+      final container = containerWith();
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // The fake never reports a call, so the tool step is asked twice before
+      // the answer — the retry the runner does by default.
+      check(llm.prompts).length.equals(3);
+      check(llm.prompts[1]).contains('You did not call the web_search tool');
+    });
+
+    test('samples low whatever the Chat sliders say', () async {
+      final container = containerWith(
+        sampler: const SamplerSettings(temperature: 1.8),
+      );
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // A step is instruction-following, and two runs of one agent should
+      // differ because of the model rather than the sampler.
+      check(llm.applied.single.temperature)
+          .equals(SamplerSettings.agentTemperature);
+      check(llm.applied.single.maxTokens).equals(512);
     });
 
     test('runs on the model picked here, not the active one', () async {
@@ -169,6 +320,7 @@ void main() {
     test('gathers the trace, the output and the log', () async {
       final container = containerWith();
       await notifierOf(container).open('test_agent');
+      llm.scriptedToolCalls = toolCalledOn();
       llm.scriptedReplies = <List<String>>[
         <String>['searched'],
         <String>['Dart ', 'records'],
@@ -178,7 +330,8 @@ void main() {
       await pumpEventQueue();
 
       final state = stateOf(container);
-      check(state.visibleTrace).length.equals(2);
+      // A tool row, its result row, and the answer.
+      check(state.visibleTrace).length.equals(3);
       check(state.visibleOutput).equals('Dart records');
       check(state.logs).isNotEmpty();
       // The load is logged here, before the runner has anything to say.

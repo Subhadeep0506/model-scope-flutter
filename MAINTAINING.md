@@ -23,7 +23,7 @@ Run these from the project root (`model_scope_flutter/`).
 [app_cache_service.dart:18](lib/domain/services/app_cache_service.dart#L18). That
 one is deliberate and known. If you ever see **2** issues, your change caused it.
 
-**`flutter test` should say `554 passed`.** If the number drops, you broke
+**`flutter test` should say `572 passed`.** If the number drops, you broke
 something. If it rises, you added a test — good.
 
 There is nothing to run locally on this machine. The only way to see the app
@@ -433,6 +433,32 @@ a single scraped page runs to tens of kilobytes, and fifty runs of those would
 cost more storage than every transcript on the device. It lives for as long as
 the run screen is open.
 
+### Three things an agent run does that Chat does not
+
+All three exist because a model that reasons, or that samples loosely, will
+answer a question instead of calling the tool it was handed — and this app is
+built to measure tool calling.
+
+1. **Thinking is turned off.** `AgentRunner.run` calls `llm.setThinking(false)`,
+   which is `setTemplateVariable("enable_thinking", false)` underneath. A
+   reasoning model otherwise works the answer out inside `<think>…</think>` and
+   then states it, never reaching for the tool. A chat template that has no such
+   variable makes this throw; the run carries on and the log says so. Chat is
+   untouched and keeps its collapsible thinking block.
+2. **A skipped tool step is asked again, once.** `AgentRunner.toolRetries`
+   defaults to 1. The second prompt is the first plus a line leaving no room —
+   *"You did not call the X tool. Call it now."* The failed first attempt stays
+   in the trace as an amber `— not called, retrying` row, because a model that
+   has to be told twice is a worse model and hiding that defeats the point.
+3. **The sampler is low and fixed.** `SamplerSettings.forAgentRun()` pins
+   temperature to `agentTemperature` (0.2) whatever the Chat sliders say, so two
+   runs of one agent differ because of the model rather than the sampler.
+
+Reasoning is also stripped everywhere it would travel: a step passes its answer
+to the next step, not its thinking, and `AgentRun.output` holds the answer
+alone. The raw text stays in the log, which is the one place it is worth
+reading.
+
 ### Adding or changing a stored setting
 
 Anything saved to disk lives in `lib/data/models/` and is converted to and from
@@ -497,7 +523,7 @@ The gap scale, so you pick the right one: `gapXs` 4, `gapSm` 8, `gapMd` 12,
 ### Running them
 
 ```bash
-flutter test                                        # all 554
+flutter test                                        # all 572
 flutter test test/presentation/home_screen_test.dart  # just one file
 ```
 
@@ -643,7 +669,7 @@ knowing them up front saves a round trip.
 ```bash
 dart format lib test     # tidy
 flutter analyze .        # must say "1 issue found"
-flutter test             # must say "554 passed" (or more)
+flutter test             # must say "572 passed" (or more)
 ```
 
 If you changed anything that runs on the phone — a screen, a permission, the

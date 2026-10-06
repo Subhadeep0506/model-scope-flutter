@@ -2,6 +2,7 @@ import 'package:checks/checks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:model_scope_flutter/data/models/agent_run.dart';
+import 'package:model_scope_flutter/data/models/catalog_model.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
 import 'package:model_scope_flutter/data/repositories/agent_repository.dart';
 import 'package:model_scope_flutter/presentation/screens/agent_detail_screen.dart';
@@ -19,6 +20,7 @@ void main() {
     List<AgentRun>? runs,
     List<ModelDescriptor>? models,
     List<String> needingKeys = const <String>[],
+    FakeCatalogRepository? catalog,
     String agentId = 'test_agent',
   }) async {
     tester.view.physicalSize = const Size(1200, 3200);
@@ -42,6 +44,7 @@ void main() {
           ]),
           agentRuns: history,
           tools: fakeToolRegistry(needingKeys: needingKeys),
+          catalog: catalog ?? toolCapableCatalog(),
         ),
       ),
     );
@@ -95,6 +98,7 @@ void main() {
 
   testWidgets('running draws the trace and the output', (tester) async {
     await pumpDetail(tester);
+    llm.scriptedToolCalls = toolCalledOn();
     llm.scriptedReplies = <List<String>>[
       <String>['searched'],
       <String>['Dart ', 'records ', 'are tuples.'],
@@ -177,6 +181,51 @@ void main() {
 
     check(find.text('Configure inputs').evaluate()).isNotEmpty();
     check(find.text('Run with defaults').evaluate()).isNotEmpty();
+  });
+
+  testWidgets('the output shows the answer, never the reasoning', (
+    tester,
+  ) async {
+    await pumpDetail(tester);
+    llm.scriptedToolCalls = toolCalledOn();
+    llm.scriptedReplies = <List<String>>[
+      <String>['searched'],
+      <String>['<think>', 'Let me work this out.', '</think>', 'It is 42.'],
+    ];
+
+    await tester.tap(find.text('Run with defaults'));
+    await tester.pumpAndSettle();
+
+    check(find.textContaining('It is 42.').evaluate()).isNotEmpty();
+    check(find.textContaining('Let me work this out').evaluate()).isEmpty();
+    check(find.textContaining('<think>').evaluate()).isEmpty();
+  });
+
+  testWidgets('a model with no tool calling warns but still runs', (
+    tester,
+  ) async {
+    await pumpDetail(
+      tester,
+      models: <ModelDescriptor>[
+        fakeInstalledModel(repoId: 'ggml-org/gemma-3-1b-it-GGUF'),
+      ],
+      catalog: FakeCatalogRepository(
+        models: <CatalogModel>[
+          fakeCatalogModel(
+            repoId: 'ggml-org/gemma-3-1b-it-GGUF',
+            name: 'Gemma 3 1B',
+            capabilities: const <ModelCapability>[ModelCapability.textToText],
+          ),
+        ],
+      ),
+    );
+
+    check(find.textContaining('not marked as tool-calling').evaluate())
+        .isNotEmpty();
+    // Watching a model fail to reach for a tool is a legitimate measurement,
+    // so the button stays live.
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    check(button.onPressed).isNotNull();
   });
 
   testWidgets('an agent that is not there says so', (tester) async {

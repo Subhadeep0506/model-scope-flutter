@@ -16,6 +16,7 @@ class AgentOutputCard extends StatelessWidget {
     super.key,
     required this.text,
     this.isStreaming = false,
+    this.isThinking = false,
     this.error,
   });
 
@@ -24,6 +25,11 @@ class AgentOutputCard extends StatelessWidget {
   /// True while tokens are still arriving, which holds finished blocks still
   /// rather than re-laying them out on every token.
   final bool isStreaming;
+
+  /// True while the model is still inside its reasoning block, which this card
+  /// never shows. Says `Thinking…` rather than `Writing…`, so a long pause
+  /// before the first word of the answer is accounted for.
+  final bool isThinking;
 
   /// Printed above the text when the run stopped early. The text stays, since
   /// a partial answer is still worth reading.
@@ -83,7 +89,11 @@ class AgentOutputCard extends StatelessWidget {
                 )
               else if (failure == null)
                 Text(
-                  isStreaming ? 'Writing…' : 'The agent produced no text.',
+                  switch ((isStreaming, isThinking)) {
+                    (_, true) => 'Thinking…',
+                    (true, _) => 'Writing…',
+                    _ => 'The agent produced no text.',
+                  },
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: palette.muted,
                   ),

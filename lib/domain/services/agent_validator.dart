@@ -17,25 +17,10 @@ class AgentAvailability {
   String? get firstBlocker => blockers.isEmpty ? null : blockers.first;
 }
 
-/// Checks an agent before it is allowed to run.
-///
-/// Two different jobs, deliberately in one place. A **structural** problem —
-/// a step naming a tool that does not exist, or reading a step that comes
-/// after it — makes the template broken, and nothing the user does in Settings
-/// will fix it. A **readiness** problem — no API key, no model installed — is
-/// temporary and actionable. Both are reported the same way because the agent
-/// card has one amber line for either.
-///
-/// Running this before every run rather than only at save time is deliberate:
-/// a template that validated when it was written can stop being runnable
-/// because the user deleted the model it names or removed a key.
 class AgentValidator {
   const AgentValidator(this._tools);
-
   final ToolRegistry _tools;
 
-  /// Everything wrong with [template] that does not depend on the device —
-  /// safe to call while the user is still typing in the builder.
   List<String> structuralProblems(AgentTemplate template) {
     final problems = <String>[
       ..._pipelineShape(template),
@@ -47,8 +32,6 @@ class AgentValidator {
     return problems;
   }
 
-  /// Whether [template] can run right now, with [hasModel] saying whether any
-  /// weights are installed and [values] holding what the user has filled in.
   Future<AgentAvailability> check(
     AgentTemplate template, {
     required bool hasModel,
@@ -60,8 +43,6 @@ class AgentValidator {
       ..._missingInputs(template, values),
     ];
 
-    // Only asked when the shape is sound: a key warning about a tool that does
-    // not exist would be noise on top of a real error.
     if (blockers.isEmpty) {
       for (final name in template.toolNames) {
         final blocker = await _tools.blockerFor(name);
@@ -109,9 +90,6 @@ class AgentValidator {
     };
   }
 
-  /// Every reference a step makes must name a declared input, or a step that
-  /// has already run. Forward references are what make a pipeline a pipeline
-  /// rather than a graph, and the check is what keeps it one.
   List<String> _referenceProblems(AgentTemplate template) {
     final problems = <String>[];
     final available = <String>{
@@ -152,8 +130,6 @@ class AgentValidator {
         '$who reads "$reference", which nothing before it produces',
   ];
 
-  /// A required input the user has left empty. An input with a default is
-  /// never missing — that is what `Run with defaults` relies on.
   List<String> _missingInputs(
     AgentTemplate template,
     Map<String, String> values,

@@ -133,6 +133,15 @@ abstract interface class LlmService {
   /// Pushes new sampling settings onto the loaded model without reloading it.
   Future<void> applySettings(SamplerSettings settings);
 
+  /// Turns the model's reasoning block on or off.
+  ///
+  /// Only works where the chat template reads `enable_thinking`; on a template
+  /// that does not, this throws. An agent run turns it off, because a model
+  /// that reasons will often work an answer out while thinking and then state
+  /// it rather than reaching for the tool it was given — which is the failure
+  /// this app is built to measure, not one to cause.
+  Future<void> setThinking(bool enabled);
+
   /// Replaces the model's system prompt without reloading it.
   ///
   /// Separate from [applySettings] because the two have different owners: the

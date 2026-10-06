@@ -26,7 +26,14 @@ void main() {
     ],
   );
 
-  AgentRunner runnerOver(FakeLlmService llm, {ToolRegistry? tools}) {
+  /// [toolRetries] defaults to none, so a test about sequencing or logging
+  /// sees one ask per step. The retry has its own group, which is also where
+  /// the production default of one is pinned.
+  AgentRunner runnerOver(
+    FakeLlmService llm, {
+    ToolRegistry? tools,
+    int toolRetries = 0,
+  }) {
     final registry = tools ?? registryOf(<String>['web_search']);
     return AgentRunner(
       llm,
@@ -34,6 +41,7 @@ void main() {
       AgentValidator(registry),
       newId: () => 'run-1',
       now: () => DateTime(2026, 10, 6, 9),
+      toolRetries: toolRetries,
     );
   }
 
@@ -322,6 +330,167 @@ void main() {
       await runOf(runnerOver(llm), templateOf());
 
       check(llm.systemPrompts).isEmpty();
+    });
+  });
+
+  group('thinking', () {
+    test('is turned off once, before the first step', () async {
+      final llm = FakeLlmService()..loadedForTest();
+
+      await runOf(runnerOver(llm), templateOf());
+
+      // A reasoning model works the answer out while thinking and then states
+      // it, rather than calling the tool it was given.
+      check(llm.thinkingCalls).deepEquals(<bool>[false]);
+    });
+
+    test('a template that refuses it still runs, and says so', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.thinkingFailure = StateError('no enable_thinking in this template');
+
+      final events = await runOf(runnerOver(llm), templateOf());
+      final logs = events.whereType<LogAdded>().map((e) => e.entry).toList();
+
+      check(finishedRun(events).error).isNull();
+      check(llm.prompts).length.equals(3);
+      check(logs.map((entry) => entry.text).join('\n'))
+          .contains('has no enable_thinking');
+    });
+
+    test('a step passes on its answer, never its reasoning', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedReplies = <List<String>>[
+        <String>['<think>', 'I should search for it.', '</think>', 'TWO HITS'],
+        <String>['the points'],
+        <String>['done'],
+      ];
+
+      await runOf(runnerOver(llm), templateOf());
+
+      // Step two reads step one. Its reasoning must not become step two's
+      // context — that is how a pipeline fills a context window with nothing.
+      check(llm.prompts[1]).contains('TWO HITS');
+      check(llm.prompts[1]).not((it) => it.contains('I should search'));
+    });
+
+    test('the run record keeps the answer alone', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedReplies = <List<String>>[
+        <String>['a'],
+        <String>['b'],
+        <String>['<think>working it out</think>', 'Dart records are tuples.'],
+      ];
+
+      final events = await runOf(runnerOver(llm), templateOf());
+      final run = finishedRun(events);
+
+      check(run.output).equals('Dart records are tuples.');
+      check(run.summary).equals('Dart records are tuples.');
+      // The tokens still stream raw, so the screen can strip as they arrive.
+      check(events.whereType<AnswerToken>().map((e) => e.text).join())
+          .contains('<think>');
+    });
+  });
+
+  group('a skipped tool', () {
+    /// Reports a call on the [n]th ask and none before it, which is how a
+    /// model that has to be told twice is scripted.
+    Map<int, List<ToolInvocation>> callsOnAsk(int n) =>
+        <int, List<ToolInvocation>>{
+          n: <ToolInvocation>[
+            const ToolInvocation(
+              name: 'web_search',
+              arguments: '"dart records"',
+              result: 'Results for dart records',
+            ),
+          ],
+        };
+
+    test('is asked again, and the second answer is kept', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedToolCalls = callsOnAsk(1);
+      llm.scriptedReplies = <List<String>>[
+        <String>['I worked it out myself'],
+        <String>['TOOL SAID SO'],
+        <String>['the points'],
+        <String>['done'],
+      ];
+
+      final run = finishedRun(
+        await runOf(runnerOver(llm, toolRetries: 1), templateOf()),
+      );
+
+      check(llm.prompts).length.equals(4);
+      check(llm.prompts[1]).contains('You did not call the web_search tool');
+      check(llm.prompts[1]).contains('Search for dart records.');
+      // The failed attempt stays above the successful call.
+      check(run.trace.take(3).map((e) => e.label).toList()).deepEquals(<String>[
+        'web_search — not called, retrying',
+        'web_search("dart records")',
+        'web_search result',
+      ]);
+      check(run.trace.first.ok).isFalse();
+      check(run.trace[1].ok).isTrue();
+    });
+
+    test('that is skipped twice leaves one failed row', () async {
+      final llm = FakeLlmService()..loadedForTest();
+
+      final run = finishedRun(
+        await runOf(runnerOver(llm, toolRetries: 1), templateOf()),
+      );
+
+      check(llm.prompts).length.equals(4);
+      check(run.trace.take(2).map((e) => e.label).toList()).deepEquals(<String>[
+        'web_search — not called, retrying',
+        'web_search — not called',
+      ]);
+      check(run.trace[1].ok).isFalse();
+    });
+
+    test('is retried once by default', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      final registry = registryOf(<String>['web_search']);
+
+      await AgentRunner(llm, registry, AgentValidator(registry))
+          .run(templateOf(), values: const <String, String>{}, modelId: 'm')
+          .toList();
+
+      // Two asks for the one tool step, plus the reason step and the answer.
+      check(llm.prompts).length.equals(4);
+    });
+
+    test('a reason step is never retried', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      final template = templateOf(
+        pipeline: const <PipelineStep>[
+          PipelineStep(
+            id: 'points',
+            kind: StepKind.reason,
+            prompt: 'List the main points.',
+          ),
+        ],
+      );
+
+      await runOf(runnerOver(llm, toolRetries: 1), template);
+
+      // A reason step has no tool to skip.
+      check(llm.prompts).length.equals(2);
+    });
+
+    test('a tool call with no reply passes the result on instead', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedToolCalls = callsOnAsk(0);
+      llm.scriptedReplies = <List<String>>[
+        <String>[''],
+        <String>['the points'],
+        <String>['done'],
+      ];
+
+      await runOf(runnerOver(llm, toolRetries: 1), templateOf());
+
+      // Otherwise step two is handed a blank and has nothing to reason about.
+      check(llm.prompts[1]).contains('Results for dart records');
     });
   });
 

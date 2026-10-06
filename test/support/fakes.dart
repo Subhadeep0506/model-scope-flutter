@@ -90,6 +90,13 @@ class FakeLlmService implements LlmService {
   /// own prompt reached the model and was set once rather than per step.
   final List<String> systemPrompts = <String>[];
 
+  /// Every value handed to [setThinking].
+  final List<bool> thinkingCalls = <bool>[];
+
+  /// Thrown by [setThinking] instead of recording, standing in for a chat
+  /// template that does not read `enable_thinking`.
+  Object? thinkingFailure;
+
   /// Bumped by [resetHistory], so a test can prove the context is cleared
   /// between steps.
   int resetCalls = 0;
@@ -159,6 +166,13 @@ class FakeLlmService implements LlmService {
   @override
   Future<void> setSystemPrompt(String prompt) async =>
       systemPrompts.add(prompt);
+
+  @override
+  Future<void> setThinking(bool enabled) async {
+    final refusal = thinkingFailure;
+    if (refusal != null) throw refusal;
+    thinkingCalls.add(enabled);
+  }
 
   @override
   Future<void> restoreHistory(List<ChatMessage> messages) async =>
@@ -763,6 +777,38 @@ AgentTemplate fakeAgentTemplate({
         reads: <String>['step.search'],
       ),
 );
+
+/// A catalog saying the model [fakeInstalledModel] installs can call tools.
+///
+/// The shared [fakeCatalogModel] default is text-only and shares a repository
+/// id with it, so an agent test that does not pass this would see the "not
+/// marked as tool-calling" warning in every case.
+FakeCatalogRepository toolCapableCatalog() => FakeCatalogRepository(
+  models: <CatalogModel>[
+    fakeCatalogModel(
+      capabilities: const <ModelCapability>[
+        ModelCapability.textToText,
+        ModelCapability.toolCalling,
+      ],
+    ),
+  ],
+);
+
+/// What [FakeLlmService.scriptedToolCalls] needs for the tool step of
+/// [fakeAgentTemplate] to call its tool on the ask numbered [onAsk].
+///
+/// The default of 0 means no retry happens, so a test about something other
+/// than retrying sees one ask per step.
+Map<int, List<ToolInvocation>> toolCalledOn({
+  int onAsk = 0,
+  String name = 'web_search',
+  String arguments = '"dart records"',
+  String result = 'Results for dart records',
+}) => <int, List<ToolInvocation>>{
+  onAsk: <ToolInvocation>[
+    ToolInvocation(name: name, arguments: arguments, result: result),
+  ],
+};
 
 /// One finished run, as the history card and the bench footer read it.
 AgentRun fakeAgentRun({

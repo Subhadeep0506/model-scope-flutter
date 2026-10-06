@@ -8,14 +8,8 @@ import '../tools/tool_registry.dart';
 import 'agent_scope.dart';
 import 'agent_validator.dart';
 import 'llm_service.dart';
+import 'thinking_parser.dart';
 
-/// Something that happened during a run.
-///
-/// Four kinds, deliberately few. The trace screen appends a row per
-/// [TraceAdded], streams the answer from [AnswerToken], collects [LogAdded]
-/// for the log sheet, and stops at [RunFinished] — which carries the whole
-/// record whether the run succeeded or not, so there is no separate failure
-/// event to forget to handle.
 sealed class AgentEvent {
   const AgentEvent();
 }
@@ -32,10 +26,6 @@ final class AnswerToken extends AgentEvent {
   final String text;
 }
 
-/// One line for the log sheet. Separate from [TraceAdded] because the two
-/// answer different questions: a trace row says *what* a step did and is kept
-/// in the run's history, while a log line says what was actually sent and
-/// returned and is thrown away when the screen closes.
 final class LogAdded extends AgentEvent {
   const LogAdded(this.entry);
 
@@ -48,19 +38,6 @@ final class RunFinished extends AgentEvent {
   final AgentRun run;
 }
 
-/// Runs one agent.
-///
-/// The shape of a run is fixed by the template, not decided by the model: the
-/// pipeline's steps happen in order, each one is a single turn with exactly
-/// one tool in reach or none at all, and the answer step closes it. The model
-/// chooses a tool's *arguments* and nothing else. That is what makes a run
-/// reproducible enough to compare one model against another, which is the
-/// whole point of this app.
-///
-/// The model is loaded once and used for every step. Steps carry a `model`
-/// field that is ignored — swapping weights mid-run means unloading and
-/// reloading a gigabyte or so per step, which on a phone is slower than the
-/// generation it was meant to improve.
 class AgentRunner {
   const AgentRunner(
     this._llm,
@@ -68,28 +45,24 @@ class AgentRunner {
     this._validator, {
     this.newId,
     this.now,
+    this.toolRetries = 1,
   });
 
   final LlmService _llm;
   final ToolRegistry _tools;
   final AgentValidator _validator;
 
-  /// Overridden in tests so a run record is comparable; otherwise the id is
-  /// built from the agent and the start time.
+  /// How many extra times a tool step is asked when the model answered without
+  /// reaching for the tool. The first failure is kept in the trace either way —
+  /// a model that has to be told twice is a worse model, and this app exists
+  /// to see that.
+  final int toolRetries;
+
   final String Function()? newId;
 
-  /// Overridden in tests so `startedAt` is fixed.
   final DateTime Function()? now;
-
   static const String _logName = 'AgentRunner';
 
-  /// Runs [template] with [values], emitting as it goes.
-  ///
-  /// The model must already be loaded; [modelId] names it only so the run
-  /// record can say which one answered. Loading is the caller's job because
-  /// the chat screen and an agent both want the same weights and the same
-  /// GPU-to-CPU fallback, and only the view model layer knows the settings
-  /// that go into it.
   Stream<AgentEvent> run(
     AgentTemplate template, {
     required Map<String, String> values,
@@ -125,11 +98,22 @@ class AgentRunner {
     }
 
     try {
-      // The template's own prompt, not the user's Chat one: it is what tells
-      // the model to call the tool rather than guess, and it is set once here
-      // because it survives the history being cleared between steps.
       await _llm.setSystemPrompt(template.systemPrompt);
       yield _log('system', template.systemPrompt);
+
+      // A reasoning model works the answer out while thinking and then states
+      // it, rather than calling the tool it was given. Caught rather than
+      // fatal: a template with no such variable should still run, and the log
+      // is where that is worth saying.
+      try {
+        await _llm.setThinking(false);
+        yield _log('system', 'Thinking disabled for this run.');
+      } catch (error) {
+        yield _log(
+          'system',
+          "This model's template has no enable_thinking: $error",
+        );
+      }
 
       for (final step in template.pipeline) {
         await for (final event in _runStep(step, scope, trace)) {
@@ -172,30 +156,14 @@ class AgentRunner {
     );
   }
 
-  /// Where the answer's text is kept in the scope. Not a step id a template
-  /// can use — the leading space makes it unwritable from JSON, so no step can
-  /// collide with it.
   static const String _answerKey = ' answer';
 
-  /// One pipeline step: clear the context, set the one tool it may use, ask,
-  /// and record what came back.
   Stream<AgentEvent> _runStep(
     PipelineStep step,
     AgentScope scope,
     List<TraceEntry> trace,
   ) async* {
-    final clock = Stopwatch()..start();
-
-    // The context is cleared between steps because the scope, not the chat
-    // history, is what carries data forward. A five-step agent would otherwise
-    // need a context window holding every tool result at once, which no phone
-    // model has; and clearing makes `recentToolCalls` mean this step's calls
-    // with nothing to track. The system prompt is kept — it lives outside the
-    // history.
-    await _llm.resetHistory();
     final tools = _toolsFor(step);
-    await _llm.setTools(tools);
-
     final prompt = buildStepPrompt(
       instruction: _instructionFor(step),
       reads: step.reads,
@@ -207,57 +175,94 @@ class AgentRunner {
       '${step.id} · ${step.kind.label.toLowerCase()} · '
           '${tools.isEmpty ? 'no tools' : tools.first.name}',
     );
-    yield _log('prompt', prompt);
 
-    final buffer = StringBuffer();
-    await for (final token in _llm.ask(prompt)) {
-      buffer.write(token);
-    }
-    final reply = buffer.toString().trim();
-    scope.record(step.id, reply);
-    clock.stop();
+    var asked = prompt;
+    for (var attempt = 0; ; attempt++) {
+      final clock = Stopwatch()..start();
+      // Tools before history, which is the order the library's own test uses.
+      await _llm.setTools(tools);
+      await _llm.resetHistory();
 
-    yield _log('reply', reply.isEmpty ? '(nothing)' : reply);
+      yield _log('prompt', asked);
+      final buffer = StringBuffer();
+      await for (final token in _llm.ask(asked)) {
+        buffer.write(token);
+      }
+      clock.stop();
 
-    final calls = step.kind == StepKind.tool
-        ? await _llm.recentToolCalls()
-        : const <ToolInvocation>[];
-    for (final call in calls) {
-      yield _log('tool', call.name);
-      yield _log(
-        'args',
-        call.rawArguments.isEmpty ? call.arguments : call.rawArguments,
-      );
-      yield _log('result', call.result.isEmpty ? '(nothing)' : call.result);
-    }
-    if (step.kind == StepKind.tool && calls.isEmpty) {
-      yield _log(
-        'error',
-        'The model answered without calling ${step.tool}.',
-        isError: true,
-      );
-    }
+      final raw = buffer.toString().trim();
+      yield _log('reply', raw.isEmpty ? '(nothing)' : raw);
 
-    for (final entry in _traceFor(step, calls, clock.elapsedMilliseconds)) {
-      trace.add(entry);
-      yield TraceAdded(entry);
+      final calls = step.kind == StepKind.tool
+          ? await _llm.recentToolCalls()
+          : const <ToolInvocation>[];
+      for (final call in calls) {
+        yield _log('tool', call.name);
+        yield _log(
+          'args',
+          call.rawArguments.isEmpty ? call.arguments : call.rawArguments,
+        );
+        yield _log('result', call.result.isEmpty ? '(nothing)' : call.result);
+      }
+
+      final skipped = step.kind == StepKind.tool && calls.isEmpty;
+      final retrying = skipped && attempt < toolRetries;
+      if (skipped) {
+        yield _log(
+          'error',
+          'The model answered without calling ${step.tool}.'
+              '${retrying ? ' Asking again.' : ''}',
+          isError: true,
+        );
+      }
+
+      if (retrying) {
+        // The failed attempt stays in the trace: a model that needs telling
+        // twice is a worse model, and hiding that would defeat the point.
+        final entry = TraceEntry(
+          kind: TraceKind.tool,
+          label: '${step.tool} — not called, retrying',
+          durationMs: clock.elapsedMilliseconds,
+          ok: false,
+        );
+        trace.add(entry);
+        yield TraceAdded(entry);
+        asked = _insistOn(step, prompt);
+        continue;
+      }
+
+      scope.record(step.id, _outputOf(raw, calls));
+      for (final entry in _traceFor(step, calls, clock.elapsedMilliseconds)) {
+        trace.add(entry);
+        yield TraceAdded(entry);
+      }
+      return;
     }
   }
 
-  /// The closing step: no tools, everything gathered so far, and the answer
-  /// streamed token by token so the output panel fills in as it is written.
+  /// What a step passes on: its reply with any reasoning removed, or — when a
+  /// model called the tool and then said nothing — what the tool returned, so
+  /// the next step is not handed a blank.
+  static String _outputOf(String raw, List<ToolInvocation> calls) {
+    final answer = splitThinking(raw).answer;
+    if (answer.isNotEmpty || calls.isEmpty) return answer;
+    return <String>[for (final call in calls) call.result].join('\n\n').trim();
+  }
+
+  /// The prompt for a second attempt: the original, then a line leaving no
+  /// room for the model to answer on its own.
+  static String _insistOn(PipelineStep step, String prompt) =>
+      '$prompt\n\nYou did not call the ${step.tool} tool. Call it now. Do not '
+      'work the answer out yourself and do not answer from memory.';
   Stream<AgentEvent> _runAnswer(
     AgentTemplate template,
     AgentScope scope,
     List<TraceEntry> trace,
   ) async* {
     final clock = Stopwatch()..start();
-    await _llm.resetHistory();
     await _llm.setTools(const <ToolDefinition>[]);
+    await _llm.resetHistory();
 
-    // An answer that names no sources reads every step in order, which is
-    // what a summary almost always wants and saves a template repeating the
-    // list of its own steps.
     final reads = template.answer.reads.isNotEmpty
         ? template.answer.reads
         : <String>[for (final step in template.pipeline) 'step.${step.id}'];
@@ -276,9 +281,13 @@ class AgentRunner {
       yield AnswerToken(token);
     }
     clock.stop();
-    final answer = buffer.toString().trim();
-    scope.record(_answerKey, answer);
-    yield _log('reply', answer.isEmpty ? '(nothing)' : answer);
+    final raw = buffer.toString().trim();
+    // The tokens streamed raw so the screen could fill in as they arrived;
+    // what is kept is the answer alone, so the run record, its summary and the
+    // history card never carry the model's reasoning. The log keeps the raw
+    // text — that is the one place the thinking is worth reading.
+    scope.record(_answerKey, splitThinking(raw).answer);
+    yield _log('reply', raw.isEmpty ? '(nothing)' : raw);
 
     final entry = TraceEntry(
       kind: TraceKind.answer,
@@ -289,18 +298,12 @@ class AgentRunner {
     yield TraceAdded(entry);
   }
 
-  /// Exactly one tool on a tool step, none on a reason step. One rather than
-  /// all of them because a small model handed four tools will reach for the
-  /// wrong one; the template already decided which is right here.
   List<ToolDefinition> _toolsFor(PipelineStep step) {
     if (step.kind != StepKind.tool) return const <ToolDefinition>[];
     final tool = _tools.byName(step.tool ?? '');
     return tool == null ? const <ToolDefinition>[] : <ToolDefinition>[tool];
   }
 
-  /// What to ask the model. A tool step may carry no instruction — the builder
-  /// shows no field for one — so a usable line is generated from the tool's
-  /// own description, which is already written for the model to read.
   String _instructionFor(PipelineStep step) {
     final written = step.prompt?.trim() ?? '';
     if (written.isNotEmpty) return written;
@@ -311,7 +314,6 @@ class AgentRunner {
         'what it returned.';
   }
 
-  /// One line for the log sheet, stamped now.
   LogAdded _log(String channel, String text, {bool isError = false}) =>
       LogAdded(
         AgentLogEntry(
@@ -322,13 +324,6 @@ class AgentRunner {
         ),
       );
 
-  /// The rows this step adds to the trace, given the [calls] it made.
-  ///
-  /// A reason step is one `thought` row. A tool step is a `tool` row and a
-  /// `result` row per call the model actually made — which may be none, if it
-  /// answered without reaching for the tool it was given. That case is worth
-  /// seeing rather than hiding: a model ignoring the only tool in reach is
-  /// exactly the failure this app is built to measure.
   List<TraceEntry> _traceFor(
     PipelineStep step,
     List<ToolInvocation> calls,
@@ -355,8 +350,6 @@ class AgentRunner {
       ];
     }
 
-    // The step's own time, split evenly: the calls happened inside Rust and
-    // arrive without clocks of their own.
     final each = elapsedMs ~/ calls.length;
     return <TraceEntry>[
       for (final call in calls) ...<TraceEntry>[
@@ -397,8 +390,6 @@ class AgentRunner {
     );
   }
 
-  /// Marks the row a failure stopped on, so the trace shows where it broke
-  /// rather than ending on a row that looks like it succeeded.
   static void _markLastFailed(List<TraceEntry> trace) {
     if (trace.isEmpty) return;
     final last = trace.removeLast();
