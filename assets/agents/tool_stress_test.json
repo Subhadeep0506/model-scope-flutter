@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "id": "tool_stress_test",
+  "name": "Tool-Calling Stress Test",
+  "purpose": "Score agentic reliability under tricky prompts",
+  "description": "Puts three exact-answer tools in front of the model one at a time and checks it reaches for each rather than guessing. Needs no API key, so it runs on a fresh install — and because every answer is checkable, a wrong one is unarguable.",
+  "icon": "pulse",
+  "system_prompt": "You are a careful agent. When a tool can answer exactly, always call it rather than working the answer out yourself. Report what the tool returned without changing it.",
+  "inputs": [
+    {
+      "name": "sum",
+      "label": "Arithmetic",
+      "type": "text",
+      "default": "4821 * 37 - 1904",
+      "required": true
+    },
+    {
+      "name": "date_question",
+      "label": "Date question",
+      "type": "text",
+      "default": "today + 93 days",
+      "required": true
+    },
+    {
+      "name": "conversion",
+      "label": "Conversion",
+      "type": "text",
+      "default": "72 miles to km",
+      "required": true
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "arithmetic",
+      "kind": "tool",
+      "tool": "calculator",
+      "reads": [],
+      "prompt": "Work out {{input.sum}} using the calculator tool. Report only what it returned."
+    },
+    {
+      "id": "dates",
+      "kind": "tool",
+      "tool": "date_math",
+      "reads": [],
+      "prompt": "Work out {{input.date_question}} using the date_math tool. Report only what it returned."
+    },
+    {
+      "id": "units",
+      "kind": "tool",
+      "tool": "unit_convert",
+      "reads": [],
+      "prompt": "Work out {{input.conversion}} using the unit_convert tool. Report only what it returned."
+    }
+  ],
+  "answer": {
+    "prompt": "List the three results, one per line, exactly as the tools reported them. Add nothing of your own.",
+    "reads": ["step.arithmetic", "step.dates", "step.units"]
+  }
+}

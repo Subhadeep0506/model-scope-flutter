@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "price_comparison",
+  "name": "Price Comparison",
+  "purpose": "Compare prices for a product across retailers",
+  "description": "Searches the web for a product, reads the most promising retailer page, normalises price and shipping, then ranks what it found. Tests web search, scraping and numeric reasoning in one run.",
+  "icon": "tag",
+  "system_prompt": "You are a careful shopping assistant. Use only prices the tools actually returned — never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
+  "inputs": [
+    {
+      "name": "product",
+      "label": "Product name",
+      "type": "text",
+      "default": "Sony WH-1000XM5",
+      "required": true
+    },
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "choice",
+      "options": ["IN", "US", "UK", "EU"],
+      "default": "IN",
+      "required": true
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "search",
+      "kind": "tool",
+      "tool": "web_search",
+      "reads": [],
+      "prompt": "Search for retailers selling {{input.product}} in region {{input.region}}, with current prices."
+    },
+    {
+      "id": "page",
+      "kind": "tool",
+      "tool": "read_web_page",
+      "reads": ["step.search"],
+      "prompt": "Pick the result above that looks most like a retailer's product page and read it. Pass its URL to the tool exactly as it appears."
+    },
+    {
+      "id": "offers",
+      "kind": "reason",
+      "reads": ["step.search", "step.page"],
+      "prompt": "List every retailer you have a price for, one per line, as: retailer — price — shipping — stock. Write 'not stated' for anything the material does not give. Do not invent a figure."
+    }
+  ],
+  "answer": {
+    "prompt": "Rank the offers by total landed price, cheapest first. Say which is cheapest overall and which is best if the buyer wants it quickly, and give the difference between them in money. If only one price was found, say so instead of ranking.",
+    "reads": ["step.offers"]
+  }
+}

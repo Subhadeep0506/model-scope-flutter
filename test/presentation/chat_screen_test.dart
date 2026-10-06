@@ -113,6 +113,34 @@ void main() {
     check(find.byTooltip('Regenerate reply').evaluate()).isNotEmpty();
   });
 
+  testWidgets('a reply and a question both render as markdown', (tester) async {
+    // Models answer in markdown, so the transcript has to show the formatting
+    // rather than the syntax that produced it.
+    final llm = FakeLlmService(
+      tokens: <String>['## Quant\n\n', 'Q8_0 keeps **eight bits**.'],
+    );
+    await pumpChat(tester, seed: sessionWith(), llm: llm);
+
+    await send(tester, 'Explain **Q8_0**');
+    await tester.pumpAndSettle();
+
+    // Scoped to the message bodies: the session title in the header is a
+    // plain label taken from the prompt, so it keeps its asterisks.
+    Finder inside(Type widget, String text) => find.descendant(
+      of: find.byType(widget),
+      matching: find.textContaining(text, findRichText: true),
+    );
+
+    // The reply: the bold word is there, the markers that made it are not.
+    check(inside(AssistantMessage, 'eight bits').evaluate()).isNotEmpty();
+    check(inside(AssistantMessage, '**').evaluate()).isEmpty();
+    // The question is rendered too, so the bubble shows bold rather than stars.
+    check(inside(UserBubble, 'Q8_0').evaluate()).isNotEmpty();
+    check(inside(UserBubble, '**').evaluate()).isEmpty();
+    // The model still receives exactly what was typed.
+    check(llm.prompts.single).equals('Explain **Q8_0**');
+  });
+
   testWidgets('the composer is disabled until the model is ready', (
     tester,
   ) async {

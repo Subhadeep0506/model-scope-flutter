@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "web_answer",
+  "name": "Web Answer",
+  "purpose": "Answer one question from a live web search",
+  "description": "Searches the web once and answers from what came back, citing the pages it used. The shortest agent here — two steps — and the one to try first when checking whether a model calls a tool at all.",
+  "icon": "search",
+  "system_prompt": "You are a careful research assistant. Answer only from the search results you are given, and name the source of anything you state. If the results do not cover the question, say so rather than filling the gap from memory.",
+  "inputs": [
+    {
+      "name": "question",
+      "label": "Question",
+      "type": "text",
+      "default": "What is the latest stable Flutter release?",
+      "required": true
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "search",
+      "kind": "tool",
+      "tool": "web_search",
+      "reads": [],
+      "prompt": "Search the web for pages that answer this question: {{input.question}}"
+    }
+  ],
+  "answer": {
+    "prompt": "Answer the question using only the search results above. Quote the figure or fact you rely on and give the URL it came from. If the results do not answer it, say which part is missing.",
+    "reads": ["input.question", "step.search"]
+  }
+}

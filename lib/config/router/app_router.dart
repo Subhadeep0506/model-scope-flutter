@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../presentation/screens/agent_bench_screen.dart';
+import '../../presentation/screens/agent_detail_screen.dart';
 import '../../presentation/screens/app_shell.dart';
 import '../../presentation/screens/chat_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/model_catalog_screen.dart';
-import '../../presentation/screens/placeholder_screen.dart';
 import '../../presentation/screens/sessions_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 
@@ -19,7 +20,13 @@ abstract final class Routes {
   /// Outside the shell, so it covers the navigation bar.
   static const String session = '/chat/session/:id';
   static const String catalog = '/settings/catalog';
+
+  /// Inside the Agent branch, so the navigation bar stays visible on it — as
+  /// the mockups draw it.
+  static const String agentDetail = '/agent/:id';
+
   static String sessionOf(String id) => '/chat/session/$id';
+  static String agentOf(String id) => '/agent/$id';
 }
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -60,7 +67,17 @@ GoRouter createRouter() => GoRouter(
       branches: <StatefulShellBranch>[
         _branch(Routes.home, const HomeScreen()),
         _branch(Routes.chat, const SessionsScreen()),
-        _branch(Routes.agent, const PlaceholderScreen(title: 'Agent')),
+        _branch(
+          Routes.agent,
+          const AgentBenchScreen(),
+          routes: <RouteBase>[
+            GoRoute(
+              path: ':id',
+              builder: (_, state) =>
+                  AgentDetailScreen(agentId: state.pathParameters['id'] ?? ''),
+            ),
+          ],
+        ),
         _branch(
           Routes.settings,
           const SettingsScreen(),

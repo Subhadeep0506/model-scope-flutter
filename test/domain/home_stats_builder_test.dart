@@ -1,5 +1,6 @@
 import 'package:checks/checks.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:model_scope_flutter/data/models/agent_run.dart';
 import 'package:model_scope_flutter/data/models/chat_message.dart';
 import 'package:model_scope_flutter/data/models/chat_session.dart';
 import 'package:model_scope_flutter/data/models/generation_metrics.dart';
@@ -84,9 +85,9 @@ void main() {
       check(stats.hasNoReplies).isTrue();
     });
 
-    test('agent runs stay at zero even with a full transcript', () {
-      // Agents are not in this build, so no amount of chatting
-      // can produce a run.
+    test('chatting alone never produces an agent run', () {
+      // The two counts are folded from different stores, so no amount of
+      // chatting can move the agent tile.
       final sessions = <ChatSession>[
         session(
           id: 's1',
@@ -357,6 +358,78 @@ void main() {
 
       // Nothing was removed, so the feed must not claim it was.
       check(stats.activity.first.subtitle).equals('no model · 0 messages');
+    });
+
+    test('counts the stored agent runs and the agents available', () {
+      final stats = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: ModelLibrary.empty,
+        now: now,
+        runs: <AgentRun>[
+          fakeAgentRun(id: 'r1'),
+          fakeAgentRun(id: 'r2'),
+        ],
+        agentCount: 4,
+      );
+
+      check(stats.agentRuns).equals(2);
+      check(stats.agentCount).equals(4);
+    });
+
+    test('a run on a device with nothing else is not an empty device', () {
+      // Without this, a device whose only activity was an agent run would
+      // fold to HomeStats.empty and report nothing at all.
+      final stats = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: ModelLibrary.empty,
+        now: now,
+        runs: <AgentRun>[fakeAgentRun()],
+        agentCount: 1,
+      );
+
+      check(stats.agentRuns).equals(1);
+      check(stats.activity).length.equals(1);
+    });
+
+    test('agent runs join the activity feed in time order', () {
+      final sessions = <ChatSession>[
+        session(
+          id: 's1',
+          modelId: small.id,
+          title: 'Quant notes',
+          updatedAt: DateTime(2026, 10, 1, 10),
+        ),
+      ];
+
+      final feed = buildHomeStats(
+        sessions: sessions,
+        library: ModelLibrary.empty,
+        now: now,
+        runs: <AgentRun>[
+          fakeAgentRun(
+            agentName: 'Web Answer',
+            startedAt: DateTime(2026, 10, 3, 9),
+          ),
+        ],
+      ).activity;
+
+      check(feed.first.kind).equals(ActivityKind.agentRun);
+      check(feed.first.title).equals('Ran Web Answer');
+      check(feed.first.subtitle).startsWith('smollm2-360m · 2 steps · ');
+      check(feed.last.kind).equals(ActivityKind.session);
+    });
+
+    test('a failed run says so rather than claiming it ran', () {
+      final feed = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: ModelLibrary.empty,
+        now: now,
+        runs: <AgentRun>[
+          fakeAgentRun(agentName: 'Price Comparison', error: 'Needs a key'),
+        ],
+      ).activity;
+
+      check(feed.single.title).equals('Price Comparison failed');
     });
   });
 }

@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:model_scope_flutter/config/di/providers.dart';
 import 'package:model_scope_flutter/config/theme/app_theme.dart';
+import 'package:model_scope_flutter/data/models/agent_run.dart';
+import 'package:model_scope_flutter/data/models/agent_template.dart';
 import 'package:model_scope_flutter/data/models/api_keys.dart';
 import 'package:model_scope_flutter/data/models/app_settings.dart';
 import 'package:model_scope_flutter/data/models/catalog_model.dart';
@@ -19,6 +21,8 @@ import 'package:model_scope_flutter/data/models/hf_repo_summary.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
 import 'package:model_scope_flutter/data/models/projector_descriptor.dart';
 import 'package:model_scope_flutter/data/models/sampler_settings.dart';
+import 'package:model_scope_flutter/data/repositories/agent_repository.dart';
+import 'package:model_scope_flutter/data/repositories/agent_run_repository.dart';
 import 'package:model_scope_flutter/data/repositories/api_key_repository.dart';
 import 'package:model_scope_flutter/data/repositories/app_settings_repository.dart';
 import 'package:model_scope_flutter/data/repositories/catalog_repository.dart';
@@ -32,6 +36,8 @@ import 'package:model_scope_flutter/domain/services/attachment_picker.dart';
 import 'package:model_scope_flutter/domain/services/image_store.dart';
 import 'package:model_scope_flutter/domain/services/llm_service.dart';
 import 'package:model_scope_flutter/domain/services/model_downloader.dart';
+import 'package:model_scope_flutter/domain/tools/tool_definition.dart';
+import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
 
 /// An [LlmService] that replays canned tokens instead of running a model. It
 /// records every call, so a test can assert the max-token cap reached [stop].
@@ -66,6 +72,32 @@ class FakeLlmService implements LlmService {
 
   /// The projector path each [load] was given, null entries included.
   final List<String?> projectors = <String?>[];
+
+  /// Replies handed out in order, one per [ask], falling back to [tokens] once
+  /// the list runs out. Lets an agent test give each step its own answer.
+  List<List<String>>? scriptedReplies;
+
+  /// What [recentToolCalls] reports, keyed by the call number of the [ask] it
+  /// follows. An entry missing means that step called nothing.
+  Map<int, List<ToolInvocation>> scriptedToolCalls =
+      <int, List<ToolInvocation>>{};
+
+  /// The tool names given to each [setTools], one entry per call — so a test
+  /// can check a step was handed exactly one tool.
+  final List<List<String>> toolSets = <List<String>>[];
+
+  /// Every prompt handed to [setSystemPrompt], so a test can prove an agent's
+  /// own prompt reached the model and was set once rather than per step.
+  final List<String> systemPrompts = <String>[];
+
+  /// Bumped by [resetHistory], so a test can prove the context is cleared
+  /// between steps.
+  int resetCalls = 0;
+
+  /// Set to make the next [ask] fail, for the partial-trace path.
+  Object? Function(int askNumber)? askFailure;
+
+  int _asks = 0;
 
   final List<SamplerSettings> applied = <SamplerSettings>[];
   final List<AppSettings> runtimes = <AppSettings>[];
@@ -112,31 +144,57 @@ class FakeLlmService implements LlmService {
     _loadedProjectorPath = projectorPath;
   }
 
+  /// Marks weights as loaded without going through [load]. An agent run needs
+  /// a loaded model but does not load one itself — that is the view model's
+  /// job — so its tests start from here.
+  void loadedForTest([String id = 'qwen25-15b']) {
+    _loaded = true;
+    _loadedModelId = id;
+  }
+
   @override
   Future<void> applySettings(SamplerSettings settings) async =>
       applied.add(settings);
+
+  @override
+  Future<void> setSystemPrompt(String prompt) async =>
+      systemPrompts.add(prompt);
 
   @override
   Future<void> restoreHistory(List<ChatMessage> messages) async =>
       restored.add(List<ChatMessage>.unmodifiable(messages));
 
   @override
-  Future<void> resetHistory() async {}
+  Future<void> resetHistory() async => resetCalls++;
+
+  @override
+  Future<void> setTools(List<ToolDefinition> tools) async =>
+      toolSets.add(<String>[for (final tool in tools) tool.name]);
+
+  @override
+  Future<List<ToolInvocation>> recentToolCalls() async =>
+      scriptedToolCalls[_asks - 1] ?? const <ToolInvocation>[];
 
   @override
   Stream<String> ask(
     String prompt, {
     List<String> imagePaths = const <String>[],
   }) async* {
+    final askNumber = _asks++;
     prompts.add(prompt);
     askedImages.add(List<String>.unmodifiable(imagePaths));
     _stopped = false;
     emitted = 0;
 
-    final Object? error = failure;
+    final Object? error = failure ?? askFailure?.call(askNumber);
     if (error != null) throw error;
 
-    for (final token in tokens) {
+    final scripted = scriptedReplies;
+    final reply = scripted != null && askNumber < scripted.length
+        ? scripted[askNumber]
+        : tokens;
+
+    for (final token in reply) {
       if (_stopped) return;
       if (gap > Duration.zero) await Future<void>.delayed(gap);
       emitted++;
@@ -265,6 +323,69 @@ class FakeModelLibraryRepository implements ModelLibraryRepository {
   Future<void> save(ModelLibrary library) async {
     saveCalls++;
     stored = library;
+  }
+}
+
+/// An [AgentRepository] holding templates in memory instead of reading the
+/// asset bundle and the documents directory.
+class FakeAgentRepository implements AgentRepository {
+  FakeAgentRepository([List<Agent>? seed]) : stored = <Agent>[...?seed];
+
+  /// Built-ins, as the bench receives them.
+  FakeAgentRepository.builtIn(List<AgentTemplate> templates)
+    : stored = <Agent>[
+        for (final template in templates)
+          Agent(template: template, isBuiltIn: true),
+      ];
+
+  List<Agent> stored;
+  final List<AgentTemplate> saved = <AgentTemplate>[];
+  final List<String> deleted = <String>[];
+
+  @override
+  Future<List<Agent>> load() async => stored;
+
+  @override
+  Future<Agent?> byId(String id) async {
+    for (final agent in stored) {
+      if (agent.id == id) return agent;
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> save(AgentTemplate template) async {
+    saved.add(template);
+    return true;
+  }
+
+  @override
+  Future<void> delete(String id) async => deleted.add(id);
+}
+
+/// An [AgentRunRepository] held in memory, newest first as the real one keeps
+/// it.
+class FakeAgentRunRepository implements AgentRunRepository {
+  FakeAgentRunRepository([List<AgentRun>? seed])
+    : stored = <AgentRun>[...?seed];
+
+  List<AgentRun> stored;
+
+  @override
+  Future<List<AgentRun>> load() async => stored;
+
+  @override
+  Future<void> add(AgentRun run) async => stored = <AgentRun>[run, ...stored];
+
+  @override
+  Future<void> save(List<AgentRun> runs) async => stored = runs;
+
+  @override
+  Future<AgentRun?> lastRunOf(String agentId) async {
+    for (final run in stored) {
+      if (run.agentId == agentId) return run;
+    }
+    return null;
   }
 }
 
@@ -523,6 +644,9 @@ List<Override> fakeOverrides({
   FakeCatalogRepository? catalog,
   FakeModelDownloader? downloader,
   FakeAppCacheService? cache,
+  FakeAgentRepository? agents,
+  FakeAgentRunRepository? agentRuns,
+  ToolRegistry? tools,
 }) => <Override>[
   documentsDirectoryProvider.overrideWithValue(Directory.systemTemp),
   sessionRepositoryProvider.overrideWithValue(sessions),
@@ -556,7 +680,125 @@ List<Override> fakeOverrides({
     downloader ?? FakeModelDownloader(),
   ),
   appCacheServiceProvider.overrideWithValue(cache ?? FakeAppCacheService()),
+  // Overridden even where a test has no interest in agents: the real one
+  // enumerates the asset bundle, which `flutter test` serves only once primed.
+  agentRepositoryProvider.overrideWithValue(agents ?? FakeAgentRepository()),
+  agentRunRepositoryProvider.overrideWithValue(
+    agentRuns ?? FakeAgentRunRepository(),
+  ),
+  toolRegistryProvider.overrideWithValue(tools ?? fakeToolRegistry()),
 ];
+
+/// A registry of tools that do nothing, named as the bundled agents name them.
+/// The runner never calls a tool itself — the model does, inside the backend —
+/// so a stand-in with the right name is all an agent test needs.
+///
+/// [needingKeys] are reported unready, which is what puts the amber
+/// `Needs Tavily key` line on a bench card.
+ToolRegistry fakeToolRegistry({
+  List<String> names = const <String>[
+    'web_search',
+    'read_web_page',
+    'calculator',
+    'date_math',
+    'unit_convert',
+  ],
+  List<String> needingKeys = const <String>[],
+}) => ToolRegistry(
+  tools: <ToolDefinition>[
+    for (final name in names)
+      ToolDefinition(
+        name: name,
+        description: 'Does nothing, for a test.',
+        function: ({required String input}) async => 'ok',
+      ),
+  ],
+  readiness: <String, Future<bool> Function()>{
+    for (final name in needingKeys) name: () async => false,
+  },
+  blockers: <String, ToolBlocker>{
+    for (final name in needingKeys)
+      name: 'Needs $name key — set it in Settings',
+  },
+);
+
+/// One agent template, with a single tool step and an answer — the shape every
+/// bundled agent has, minus the prose.
+AgentTemplate fakeAgentTemplate({
+  String id = 'test_agent',
+  String name = 'Test Agent',
+  String purpose = 'For a test',
+  String description = 'A test agent that searches and then answers.',
+  String icon = 'search',
+  String systemPrompt = 'You are careful.',
+  List<AgentInput>? inputs,
+  List<PipelineStep>? pipeline,
+  AnswerStep? answer,
+}) => AgentTemplate(
+  id: id,
+  name: name,
+  purpose: purpose,
+  description: description,
+  icon: icon,
+  systemPrompt: systemPrompt,
+  inputs:
+      inputs ??
+      const <AgentInput>[
+        AgentInput(name: 'query', label: 'Query', defaultValue: 'dart records'),
+      ],
+  pipeline:
+      pipeline ??
+      const <PipelineStep>[
+        PipelineStep(
+          id: 'search',
+          kind: StepKind.tool,
+          tool: 'web_search',
+          prompt: 'Search for {{input.query}}.',
+        ),
+      ],
+  answer:
+      answer ??
+      const AnswerStep(
+        prompt: 'Answer from the search results.',
+        reads: <String>['step.search'],
+      ),
+);
+
+/// One finished run, as the history card and the bench footer read it.
+AgentRun fakeAgentRun({
+  String id = 'run-1',
+  String agentId = 'test_agent',
+  String agentName = 'Test Agent',
+  String modelId = 'smollm2-360m',
+  DateTime? startedAt,
+  int durationMs = 4240,
+  List<TraceEntry>? trace,
+  String output = 'Dart records are tuples with named fields.',
+  String? error,
+}) => AgentRun(
+  id: id,
+  agentId: agentId,
+  agentName: agentName,
+  modelId: modelId,
+  startedAt: startedAt ?? DateTime(2026, 10, 6, 9),
+  durationMs: durationMs,
+  trace:
+      trace ??
+      const <TraceEntry>[
+        TraceEntry(
+          kind: TraceKind.tool,
+          label: 'web_search("dart records")',
+          durationMs: 1060,
+        ),
+        TraceEntry(
+          kind: TraceKind.answer,
+          label: 'Final answer',
+          durationMs: 2200,
+        ),
+      ],
+  output: output,
+  error: error,
+);
 
 /// Turns off Riverpod 3's automatic retry of a failed provider build. By
 /// default a failed build retries on a timer, so a test asserting the failure

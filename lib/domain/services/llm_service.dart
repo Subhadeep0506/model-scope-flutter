@@ -2,6 +2,42 @@ import '../../data/models/app_settings.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/models/sampler_settings.dart';
+import '../tools/tool_definition.dart';
+
+/// One tool call the model made, and what came back.
+///
+/// Reconstructed after the fact rather than observed as it happens:
+/// `nobodywho` runs its tool loop inside Rust and the token stream carries
+/// only the final answer, so a call is visible only once it is in the chat
+/// history. That is enough to draw the trace, but it means there is no clock
+/// on an individual call — see `AgentRun` for what the trace reports instead.
+class ToolInvocation {
+  const ToolInvocation({
+    required this.name,
+    required this.arguments,
+    required this.result,
+    this.rawArguments = '',
+  });
+
+  final String name;
+
+  /// What the model passed, flattened to one line for the trace — the trace
+  /// row reads `web_search("sony wh-1000xm5")`.
+  final String arguments;
+
+  /// The same arguments as the backend gave them, with their names intact:
+  /// `{"query": "sony wh-1000xm5"}`. [arguments] drops the names to fit a
+  /// trace row; the run log keeps them, because a model passing the right
+  /// value under the wrong name is a failure worth being able to see.
+  final String rawArguments;
+
+  /// What the tool returned, which is what went back into the context.
+  final String result;
+
+  /// `web_search("sony wh-1000xm5")`, or `web_search()` when it passed
+  /// nothing.
+  String get signature => '$name($arguments)';
+}
 
 /// Thrown by [LlmService.load] when a model's weights are no longer where the
 /// registry says they are. Declared here, not in the `nobodywho` adapter, so
@@ -97,12 +133,37 @@ abstract interface class LlmService {
   /// Pushes new sampling settings onto the loaded model without reloading it.
   Future<void> applySettings(SamplerSettings settings);
 
+  /// Replaces the model's system prompt without reloading it.
+  ///
+  /// Separate from [applySettings] because the two have different owners: the
+  /// sampler settings carry the user's own Chat prompt, while an agent brings
+  /// the one written into its template, which is what makes it behave as the
+  /// template intends. Unlike history, the system prompt survives
+  /// [resetHistory] — it lives outside the transcript — so a run sets it once.
+  Future<void> setSystemPrompt(String prompt);
+
   /// Replaces the model's context with a restored transcript, so a session
   /// reopened after a restart continues rather than starting cold.
   Future<void> restoreHistory(List<ChatMessage> messages);
 
   /// Clears the model's context.
   Future<void> resetHistory();
+
+  /// Replaces the tools the model may call. Pass an empty list to take them
+  /// all away.
+  ///
+  /// Cheap, and deliberately separate from [load]: an agent changes the tool
+  /// set before every step, and doing that by reloading the weights would cost
+  /// seconds a step. Takes [ToolDefinition]s rather than anything from the
+  /// backend, so nothing above this interface knows what runs underneath.
+  Future<void> setTools(List<ToolDefinition> tools);
+
+  /// The tool calls made since the context was last cleared, oldest first.
+  ///
+  /// Scoped by [resetHistory] rather than by a marker, which is why an agent
+  /// resets between steps: it makes "recent" mean "this step's" with nothing
+  /// to track.
+  Future<List<ToolInvocation>> recentToolCalls();
 
   /// Streams the reply one token per event. [imagePaths] are sent ahead of
   /// [prompt], and need the model to have been loaded with a projector.

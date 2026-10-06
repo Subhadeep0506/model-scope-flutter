@@ -1,3 +1,4 @@
+import '../../data/models/agent_run.dart';
 import '../../data/models/byte_size.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_session.dart';
@@ -15,9 +16,11 @@ HomeStats buildHomeStats({
   required List<ChatSession> sessions,
   required ModelLibrary library,
   required DateTime now,
+  List<AgentRun> runs = const <AgentRun>[],
+  int agentCount = 0,
 }) {
   final replies = _repliesOf(sessions);
-  if (replies.isEmpty && library.isEmpty && sessions.isEmpty) {
+  if (replies.isEmpty && library.isEmpty && sessions.isEmpty && runs.isEmpty) {
     return HomeStats.empty;
   }
 
@@ -34,7 +37,9 @@ HomeStats buildHomeStats({
     latencyTrend: _trend(replies, now),
     throughputBySize: _throughputBySize(replies, library),
     modelUsage: _usage(sessions, library),
-    activity: _activity(sessions, library),
+    activity: _activity(sessions, library, runs),
+    agentRuns: runs.length,
+    agentCount: agentCount,
   );
 }
 
@@ -181,11 +186,11 @@ ModelUsage _usageOf(ModelDescriptor model, List<_Reply> replies) {
   );
 }
 
-/// Sessions and downloads merged, newest first. Agent runs join once agents
-/// exist, without this feed changing shape.
+/// Sessions, downloads and agent runs merged, newest first.
 List<ActivityEntry> _activity(
   List<ChatSession> sessions,
   ModelLibrary library,
+  List<AgentRun> runs,
 ) {
   final entries = <ActivityEntry>[
     for (final session in sessions)
@@ -203,6 +208,15 @@ List<ActivityEntry> _activity(
         title: 'Pulled ${model.name}',
         subtitle: '${model.quantization} · ${formatBytes(model.sizeBytes)}',
         at: model.installedAt,
+      ),
+    for (final run in runs)
+      ActivityEntry(
+        kind: ActivityKind.agentRun,
+        title: run.succeeded
+            ? 'Ran ${run.agentName}'
+            : '${run.agentName} failed',
+        subtitle: run.statsLabel,
+        at: run.startedAt,
       ),
   ];
 

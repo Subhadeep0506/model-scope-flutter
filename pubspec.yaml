@@ -25,6 +25,7 @@ dependencies:
   shared_preferences: ^2.5.5
   background_downloader: ^9.6.3
   fl_chart: ^1.2.0
+  gpt_markdown: ^1.3.1
 
 dev_dependencies:
   flutter_test:
@@ -43,3 +44,8 @@ flutter:
   # runtime through Settings rather than bundled; see assets/models/README.md.
   assets:
     - assets/catalog/models.json
+
+    # The whole directory, not named files: AgentAssetSource enumerates it
+    # through AssetManifest, so adding an agent is dropping in one JSON file
+    # with no list here to keep in step.
+    - assets/agents/

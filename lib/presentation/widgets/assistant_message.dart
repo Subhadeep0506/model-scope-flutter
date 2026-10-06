@@ -6,6 +6,7 @@ import '../../config/theme/app_palette.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/generation_metrics.dart';
 import '../../domain/services/thinking_parser.dart';
+import 'markdown_text.dart';
 import 'mono_label.dart';
 
 /// A reply: body text across the full content width, with the metrics and its
@@ -43,7 +44,11 @@ class AssistantMessage extends StatelessWidget {
           SizedBox(height: metrics.gapSm),
         ],
         if (split.answer.isNotEmpty)
-          Text(split.answer, style: Theme.of(context).textTheme.bodyLarge),
+          MarkdownText(
+            text: split.answer,
+            style: Theme.of(context).textTheme.bodyLarge ?? const TextStyle(),
+            isStreaming: message.isStreaming,
+          ),
         // Covers both the wait before the first token and the wait while the
         // model is still inside a `<think>` block it has not closed.
         if (message.isStreaming && split.answer.isEmpty)
@@ -133,7 +138,10 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
   }
 }
 
-/// The reasoning itself, styled so it never reads as the model's answer.
+/// The reasoning itself, styled so it never reads as the model's answer. The
+/// muted colour and the left rule carry that distinction on their own; the
+/// text is deliberately upright, because italic fights with the emphasis
+/// markdown applies of its own accord.
 class _ThoughtText extends StatelessWidget {
   const _ThoughtText({required this.text});
 
@@ -143,6 +151,7 @@ class _ThoughtText extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final metrics = context.metrics;
+    final body = Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
 
     return Container(
       margin: EdgeInsets.only(top: metrics.gapXs),
@@ -150,10 +159,9 @@ class _ThoughtText extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: palette.outline)),
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: palette.muted, fontStyle: FontStyle.italic),
+      child: MarkdownText(
+        text: text,
+        style: body.copyWith(color: palette.muted),
       ),
     );
   }

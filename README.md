@@ -13,6 +13,10 @@ transcript, and two modal sheets (Loaded models, Sampling).
   delete behind a confirmation, a streaming transcript, and both sheets. Sessions persist
   to shared preferences and are replayed into the model's context when a session is reopened,
   up to the number of turns set by `CHAT_MEMORY` in the Sampling sheet.
+- **Messages render as markdown.** Replies, the reasoning behind them and your own questions
+  are all drawn as markdown, with fenced code syntax-highlighted and copyable and `\( \)`
+  maths typeset. There is no reveal animation on purpose: the app reports tokens per second,
+  so text has to appear exactly when the token arrived.
 - **Home, Agent and Settings are stubs.** They exist so the bottom navigation matches the
   design; each renders a placeholder.
 - **Tool calling is not in this part.** Deferred to a later pass.

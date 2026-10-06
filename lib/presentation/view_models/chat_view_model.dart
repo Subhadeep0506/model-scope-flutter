@@ -10,6 +10,7 @@ import '../../data/models/model_descriptor.dart';
 import '../../data/models/sampler_settings.dart';
 import '../../domain/services/history_window.dart';
 import '../../domain/services/llm_service.dart';
+import '../../domain/services/model_loader.dart';
 import '../../domain/services/token_collector.dart';
 import 'chat_state.dart';
 import 'sessions_view_model.dart';
@@ -188,42 +189,19 @@ class ChatViewModel extends Notifier<ChatState> {
     }
   }
 
-  /// Loads [model], dropping GPU offload rather than giving up on it. Returns
-  /// a line to show the user, or null when the load went as asked. The retry
-  /// is deliberately not written back to settings: a refused GPU allocation is
-  /// about this run, so the next model gets another chance.
+  /// Loads [model], falling back to the CPU — see [loadWithFallback], which
+  /// an agent run shares.
   Future<String?> _load(
     ModelDescriptor model,
     SamplerSettings settings,
     String? projectorPath,
-  ) async {
-    final llm = ref.read(llmServiceProvider);
-    final runtime = await ref.read(appSettingsViewModelProvider.future);
-    try {
-      await llm.load(
-        model: model,
-        settings: settings,
-        runtime: runtime,
-        projectorPath: projectorPath,
-      );
-      return null;
-    } catch (error, stackTrace) {
-      if (!runtime.useGpu) rethrow;
-      developer.log(
-        'GPU load failed, retrying on the CPU',
-        name: _logName,
-        error: error,
-        stackTrace: stackTrace,
-      );
-      await llm.load(
-        model: model,
-        settings: settings,
-        runtime: runtime.copyWith(useGpu: false),
-        projectorPath: projectorPath,
-      );
-      return 'Loaded on the CPU — GPU offload was unavailable.';
-    }
-  }
+  ) async => loadWithFallback(
+    llm: ref.read(llmServiceProvider),
+    model: model,
+    settings: settings,
+    runtime: await ref.read(appSettingsViewModelProvider.future),
+    projectorPath: projectorPath,
+  );
 
   Future<void> _generate(
     String prompt, [

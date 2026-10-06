@@ -18,6 +18,8 @@ class HomeStats {
     required this.throughputBySize,
     required this.modelUsage,
     required this.activity,
+    this.agentRuns = 0,
+    this.agentCount = 0,
   });
 
   static const HomeStats empty = HomeStats(
@@ -67,10 +69,12 @@ class HomeStats {
   /// Sessions and downloads merged, newest first.
   final List<ActivityEntry> activity;
 
-  /// Agents are not in this build, so these are zero — getters rather than
-  /// fields, so there is nothing to pass in until they exist.
-  int get agentRuns => 0;
-  int get agentCount => 0;
+  /// Agent runs still in the history file. Capped like the file is, so this
+  /// is "recorded", not "ever".
+  final int agentRuns;
+
+  /// Agents this build offers, bundled and custom together.
+  final int agentCount;
 
   /// What the charts and the usage list show their empty copy for.
   bool get hasNoReplies => totalTokens == 0 && averageLatencyMs == 0;

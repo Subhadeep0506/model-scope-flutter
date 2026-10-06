@@ -1,5 +1,6 @@
-/// Which third-party credential a field holds. Only [huggingFace] is used by
-/// this build; the other two are stored for the Agent tab, still unbuilt.
+/// Which third-party credential a field holds. [huggingFace] pulls model
+/// weights; the other two back the web tools a model can call, which are built
+/// but not yet attached to a chat — that happens on the Agent tab.
 enum ApiKeyKind {
   huggingFace(
     label: 'Hugging Face',

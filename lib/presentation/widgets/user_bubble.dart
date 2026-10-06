@@ -4,6 +4,7 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/chat_message.dart';
 import 'image_thumbnail.dart';
+import 'markdown_text.dart';
 
 /// A question, drawn as a filled bubble hugging the right edge. Replies
 /// deliberately have no bubble — that asymmetry is what the mockup calls for.
@@ -68,10 +69,11 @@ class _Bubble extends StatelessWidget {
         color: palette.primary,
         borderRadius: metrics.cardShape,
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyLarge
-            ?.copyWith(color: palette.onPrimary),
+      child: MarkdownText(
+        text: text,
+        style: (Theme.of(context).textTheme.bodyLarge ?? const TextStyle())
+            .copyWith(color: palette.onPrimary),
+        onFilled: true,
       ),
     );
   }

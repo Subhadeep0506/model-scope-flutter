@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "id": "research_summarize",
+  "name": "Research & Summarize",
+  "purpose": "Multi-source brief with citations",
+  "description": "Searches the web on a topic, reads the most promising page in full, pulls out the points that matter, then writes a short brief with its sources named. Tests whether a model can carry a finding from one step into the next.",
+  "icon": "microscope",
+  "system_prompt": "You are a careful research assistant. Work only from what the tools return. Name the source of every claim, and say plainly when the material does not settle a question.",
+  "inputs": [
+    {
+      "name": "topic",
+      "label": "Topic",
+      "type": "text",
+      "default": "On-device large language models on phones",
+      "required": true
+    },
+    {
+      "name": "angle",
+      "label": "What to focus on",
+      "type": "text",
+      "default": "practical limits and trade-offs",
+      "required": false
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "search",
+      "kind": "tool",
+      "tool": "web_search",
+      "reads": [],
+      "prompt": "Search the web for recent, substantial writing about {{input.topic}}, focusing on {{input.angle}}."
+    },
+    {
+      "id": "page",
+      "kind": "tool",
+      "tool": "read_web_page",
+      "reads": ["step.search"],
+      "prompt": "Pick the single most substantial result above and read that page in full. Pass its URL to the tool exactly as it appears."
+    },
+    {
+      "id": "points",
+      "kind": "reason",
+      "reads": ["step.page"],
+      "prompt": "List the four or five points from this page that bear most directly on {{input.topic}}. Put each on its own line and keep the page's own figures."
+    }
+  ],
+  "answer": {
+    "prompt": "Write a brief of about 150 words on {{input.topic}}. Lead with what the material actually establishes, keep the figures, and finish with the URL of the page you read. Do not add anything the material does not support.",
+    "reads": ["step.points", "step.page"]
+  }
+}

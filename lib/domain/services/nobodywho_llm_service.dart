@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -7,6 +8,8 @@ import '../../data/models/app_settings.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/models/sampler_settings.dart';
+import '../tools/nobodywho_tools.dart';
+import '../tools/tool_definition.dart';
 import 'history_window.dart';
 import 'llm_service.dart';
 
@@ -107,6 +110,11 @@ class NobodyWhoLlmService implements LlmService {
   }
 
   @override
+  Future<void> setSystemPrompt(String prompt) async {
+    await _chat?.setSystemPrompt(prompt);
+  }
+
+  @override
   Future<void> restoreHistory(List<ChatMessage> messages) async {
     final chat = _chat;
     if (chat == null) return;
@@ -131,6 +139,76 @@ class NobodyWhoLlmService implements LlmService {
   @override
   Future<void> resetHistory() async {
     await _chat?.resetHistory();
+  }
+
+  @override
+  Future<void> setTools(List<ToolDefinition> tools) async {
+    await _chat?.setTools(toNobodyWhoTools(tools));
+  }
+
+  @override
+  Future<List<ToolInvocation>> recentToolCalls() async {
+    final chat = _chat;
+    if (chat == null) return const <ToolInvocation>[];
+    return _pairCalls(await chat.getChatHistory());
+  }
+
+  /// Walks the history pairing each call the model asked for with the result
+  /// that answered it.
+  ///
+  /// The two live in separate messages — an assistant message carries the
+  /// calls, and one tool message follows per call — so they are matched by
+  /// order rather than by any id, which the format does not carry. A call left
+  /// unanswered still appears, with an empty result: a tool the loop never got
+  /// round to running is worth seeing in the trace.
+  static List<ToolInvocation> _pairCalls(List<nobodywho.Message> history) {
+    final calls = <nobodywho.ToolCall>[];
+    final results = <String>[];
+
+    for (final message in history) {
+      switch (message) {
+        case nobodywho.Message_Assistant(:final toolCalls?):
+          calls.addAll(toolCalls);
+        case nobodywho.Message_Tool(:final content):
+          results.add(content.text);
+        default:
+          break;
+      }
+    }
+
+    return <ToolInvocation>[
+      for (final (index, call) in calls.indexed)
+        ToolInvocation(
+          name: call.name,
+          arguments: _describeArguments(call.arguments),
+          rawArguments: call.arguments?.toString() ?? '',
+          result: index < results.length ? results[index] : '',
+        ),
+    ];
+  }
+
+  /// Flattens the arguments to the one line a trace row has space for.
+  /// `{"query": "sony wh-1000xm5"}` reads as `"sony wh-1000xm5"`, because a
+  /// tool here takes one argument and its name is already on the row.
+  static String _describeArguments(Object? arguments) {
+    final decoded = switch (arguments) {
+      final String text when text.trim().startsWith('{') => _tryDecode(text),
+      final String text => text,
+      _ => arguments,
+    };
+
+    if (decoded is Map && decoded.isNotEmpty) {
+      return decoded.values.map((value) => jsonEncode(value)).join(', ');
+    }
+    return decoded == null ? '' : decoded.toString();
+  }
+
+  static Object? _tryDecode(String text) {
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return text;
+    }
   }
 
   @override

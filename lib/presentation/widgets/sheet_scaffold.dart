@@ -13,6 +13,7 @@ class SheetScaffold extends StatelessWidget {
     required this.title,
     required this.children,
     this.titleAlign = TextAlign.center,
+    this.action,
   }) : body = null;
 
   /// For a sheet whose body scrolls itself — a lazy list, say — rather than
@@ -22,6 +23,7 @@ class SheetScaffold extends StatelessWidget {
     required this.title,
     required Widget this.body,
     this.titleAlign = TextAlign.center,
+    this.action,
   }) : children = const <Widget>[];
 
   final String title;
@@ -31,6 +33,11 @@ class SheetScaffold extends StatelessWidget {
   /// Centred for the short titles — `Sampling`, `Attach` — and left for the
   /// model sheet, whose title is a model name long enough to wrap.
   final TextAlign titleAlign;
+
+  /// An action between the title and the close square, for a sheet with
+  /// something to do to its whole contents — the run log's `Copy all`. Most
+  /// sheets have none.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +53,7 @@ class SheetScaffold extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _SheetHeader(title: title, align: titleAlign),
+            _SheetHeader(title: title, align: titleAlign, action: action),
             Flexible(
               child:
                   custom ??
@@ -101,10 +108,11 @@ class SheetScaffold extends StatelessWidget {
 }
 
 class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({required this.title, required this.align});
+  const _SheetHeader({required this.title, required this.align, this.action});
 
   final String title;
   final TextAlign align;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +138,8 @@ class _SheetHeader extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
+          ?action,
+          SizedBox(width: action == null ? 0 : metrics.gapSm),
           SquareIconButton(
             icon: Icons.close_rounded,
             label: 'Close',

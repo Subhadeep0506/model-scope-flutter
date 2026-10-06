@@ -2,19 +2,14 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'sampler_settings.g.dart';
 
-// Library level because json_serializable copies default-value expressions
-// verbatim into the generated part, where a class-scoped name would not
-// resolve. The class re-exports them below so call sites stay readable.
 const double _temperature = 0.70;
 const double _topP = 0.90;
 const int _topK = 40;
 const int _maxTokens = 512;
 const int _historyTurns = 10;
-const String _systemPrompt = 'You are a concise, helpful on-device assistant.';
+const String _systemPrompt =
+    'You are a concise, helpful on-device assistant. Respond to user\'s queries as good as possible.';
 
-/// Sampling knobs exposed by the Sampling sheet.
-///
-/// Defaults match the values drawn in `assets/design/chat-settings.png`.
 @JsonSerializable(fieldRename: FieldRename.snake)
 class SamplerSettings {
   const SamplerSettings({
@@ -41,25 +36,13 @@ class SamplerSettings {
   static const (double, double) topPRange = (0.0, 1.0);
   static const (int, int) topKRange = (1, 100);
   static const (int, int) maxTokensRange = (64, 4096);
-
-  /// How many past turns may be replayed. Zero is a real setting — it answers
-  /// every prompt cold — so the range starts there rather than at one.
   static const (int, int) historyTurnsRange = (0, 50);
 
   final double temperature;
   final double topP;
   final int topK;
-
-  /// `nobodywho`'s sampler has no token cap, so this is enforced by the view
-  /// model: it counts stream events and calls `stopGeneration()` on reaching
-  /// the limit.
   final int maxTokens;
-
-  /// Past question-and-answer pairs replayed into the model's context. Not
-  /// pushed to `nobodywho`: `ChatViewModel` applies it by choosing what to
-  /// hand `restoreHistory`.
   final int historyTurns;
-
   final String systemPrompt;
 
   SamplerSettings copyWith({

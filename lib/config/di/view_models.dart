@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/agent_run.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/models/chat_session.dart';
 import '../../data/models/download_progress.dart';
@@ -7,9 +8,14 @@ import '../../data/models/gguf_file.dart';
 import '../../data/models/hf_repo_summary.dart';
 import '../../data/models/home_stats.dart';
 import '../../data/models/sampler_settings.dart';
+import '../../data/repositories/agent_repository.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../../data/sources/hf_api_client.dart';
 import '../../domain/services/home_stats_builder.dart';
+import '../../presentation/view_models/agent_bench_state.dart';
+import '../../presentation/view_models/agent_bench_view_model.dart';
+import '../../presentation/view_models/agent_run_state.dart';
+import '../../presentation/view_models/agent_run_view_model.dart';
 import '../../presentation/view_models/api_keys_state.dart';
 import '../../presentation/view_models/api_keys_view_model.dart';
 import '../../presentation/view_models/app_settings_view_model.dart';
@@ -69,6 +75,27 @@ final storageViewModelProvider = AsyncNotifierProvider<StorageViewModel, int>(
   StorageViewModel.new,
 );
 
+/// Every agent the app can run, built-in and custom.
+final agentsProvider = FutureProvider<List<Agent>>(
+  (ref) => ref.watch(agentRepositoryProvider).load(),
+);
+
+/// The stored run history, newest first.
+///
+/// Invalidated when a run finishes, which is what refreshes the Agent bench's
+/// cards and tiles and Home's figures from one place.
+final agentRunsProvider = FutureProvider<List<AgentRun>>(
+  (ref) => ref.watch(agentRunRepositoryProvider).load(),
+);
+
+final agentBenchViewModelProvider =
+    AsyncNotifierProvider<AgentBenchViewModel, AgentBenchState>(
+      AgentBenchViewModel.new,
+    );
+
+final agentRunViewModelProvider =
+    NotifierProvider<AgentRunViewModel, AgentRunState>(AgentRunViewModel.new);
+
 final repoFilesProvider = FutureProvider.family<List<GgufFile>, String>(
   (ref, repoId) => ref.watch(huggingFaceRepositoryProvider).filesOf(repoId),
   retry: _noNetworkRetry,
@@ -99,5 +126,7 @@ final homeStatsProvider = Provider<HomeStats>(
     library:
         ref.watch(modelLibraryViewModelProvider).value ?? ModelLibrary.empty,
     now: DateTime.now(),
+    runs: ref.watch(agentRunsProvider).value ?? const <AgentRun>[],
+    agentCount: ref.watch(agentsProvider).value?.length ?? 0,
   ),
 );
