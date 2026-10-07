@@ -29,7 +29,13 @@ class ModelLibraryViewModel extends AsyncNotifier<ModelLibrary> {
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     await _commit(
-      library.copyWith(models: models, activeId: library.activeId ?? model.id),
+      library.copyWith(
+        models: models,
+        // An embedding model never becomes the active one: it cannot answer,
+        // so making it active would break Chat for a user whose first
+        // download happened to be one.
+        activeId: library.activeId ?? (model.isEmbedding ? null : model.id),
+      ),
     );
   }
 
@@ -75,6 +81,10 @@ class ModelLibraryViewModel extends AsyncNotifier<ModelLibrary> {
         if (existing.id != id) existing,
     ];
     final wasActive = library.activeId == id;
+    final nextActive = <ModelDescriptor>[
+      for (final existing in remaining)
+        if (!existing.isEmbedding) existing,
+    ];
     await _commit(
       ModelLibrary(
         models: remaining,
@@ -82,8 +92,10 @@ class ModelLibraryViewModel extends AsyncNotifier<ModelLibrary> {
           for (final existing in library.projectors)
             if (existing.repoId != projector?.repoId) existing,
         ],
+        // Replaced from the chat models: an embedding model cannot answer,
+        // so promoting one would leave Chat permanently broken.
         activeId: wasActive
-            ? (remaining.isEmpty ? null : remaining.first.id)
+            ? (nextActive.isEmpty ? null : nextActive.first.id)
             : library.activeId,
       ),
     );
@@ -107,8 +119,13 @@ class ModelLibraryViewModel extends AsyncNotifier<ModelLibrary> {
   /// Switches the model Chat loads next.
   Future<void> setActive(String id) async {
     final library = await future;
-    if (library.activeId == id || library.byId(id) == null) return;
-    await _commit(ModelLibrary(models: library.models, activeId: id));
+    final model = library.byId(id);
+    // An embedding model is refused rather than set: it encodes text and
+    // cannot answer, so Chat would fail on the next message.
+    if (library.activeId == id || model == null || model.isEmbedding) return;
+    // `copyWith`, not a fresh library: building one here dropped the
+    // projectors, so switching model lost every installed vision projector.
+    await _commit(library.copyWith(activeId: id));
     // Drop the loaded weights so the next chat open picks the new model up.
     await ref.read(llmServiceProvider).dispose();
   }

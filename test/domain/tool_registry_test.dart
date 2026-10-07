@@ -3,17 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:model_scope_flutter/data/sources/firecrawl_api_client.dart';
+import 'package:model_scope_flutter/data/sources/open_meteo_api_client.dart';
 import 'package:model_scope_flutter/data/sources/tavily_api_client.dart';
 import 'package:model_scope_flutter/domain/services/firecrawl_web_crawler_service.dart';
+import 'package:model_scope_flutter/domain/services/open_meteo_weather_service.dart';
 import 'package:model_scope_flutter/domain/services/tavily_web_search_service.dart';
+import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
+import 'package:model_scope_flutter/domain/tools/document_tools.dart';
 import 'package:model_scope_flutter/domain/tools/tool_definition.dart';
 import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
 
+import '../support/fakes.dart';
+
 void main() {
+  final DocumentIndexRepository documents = FakeDocumentIndex();
+
   /// The registry the app builds, over services whose keys are whatever the
   /// test says. No request is ever made: asking whether a key is set does not
   /// touch the network.
-  ToolRegistry standard({String tavily = '', String firecrawl = ''}) {
+  ToolRegistry standard({
+    String tavily = '',
+    String firecrawl = '',
+    bool hasEmbeddingModel = true,
+  }) {
     final client = MockClient(
       (_) async => throw StateError('the registry must not call out'),
     );
@@ -26,22 +38,29 @@ void main() {
         FirecrawlApiClient(client),
         () async => firecrawl,
       ),
+      weather: OpenMeteoWeatherService(OpenMeteoApiClient(client)),
+      documents: documents,
+      embedder: FakeEmbeddingService(),
+      retrieval: RetrievalSettings(),
+      hasEmbeddingModel: () async => hasEmbeddingModel,
     );
   }
 
   group('what this build ships', () {
-    test('registers the five tools an agent may name', () {
+    test('registers the seven tools an agent may name', () {
       check(standard().names).deepEquals(<String>[
         'calculator',
         'date_math',
+        'get_weather',
         'read_web_page',
+        'search_document',
         'unit_convert',
         'web_search',
       ]);
     });
 
     test('counts them for the TOOLS tile', () {
-      check(standard().count).equals(5);
+      check(standard().count).equals(7);
     });
 
     test('hands back the tool behind a name', () {
@@ -56,7 +75,14 @@ void main() {
 
   group('whether a tool can run', () {
     test('a tool needing no key is always ready', () async {
-      for (final name in <String>['calculator', 'date_math', 'unit_convert']) {
+      // get_weather is here rather than beside the web tools because
+      // Open-Meteo is open: there is no key for Settings to be missing.
+      for (final name in <String>[
+        'calculator',
+        'date_math',
+        'unit_convert',
+        'get_weather',
+      ]) {
         check(await standard().blockerFor(name), because: name).isNull();
       }
     });
@@ -88,6 +114,13 @@ void main() {
           FirecrawlApiClient(MockClient((_) async => http.Response('{}', 200))),
           () async => '',
         ),
+        weather: OpenMeteoWeatherService(
+          OpenMeteoApiClient(MockClient((_) async => http.Response('{}', 200))),
+        ),
+        documents: documents,
+        embedder: FakeEmbeddingService(),
+        retrieval: RetrievalSettings(),
+        hasEmbeddingModel: () async => true,
       );
 
       check(await registry.blockerFor('web_search')).isNotNull();

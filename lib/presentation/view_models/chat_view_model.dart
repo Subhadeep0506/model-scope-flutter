@@ -6,8 +6,10 @@ import 'package:uuid/uuid.dart';
 import '../../config/di/providers.dart';
 import '../../config/di/view_models.dart';
 import '../../data/models/chat_message.dart';
+import '../../data/models/generation_metrics.dart';
 import '../../data/models/model_descriptor.dart';
 import '../../data/models/sampler_settings.dart';
+import '../../data/models/usage_record.dart';
 import '../../domain/services/history_window.dart';
 import '../../domain/services/llm_service.dart';
 import '../../domain/services/model_loader.dart';
@@ -228,7 +230,37 @@ class ChatViewModel extends Notifier<ChatState> {
         ),
       ),
     );
+    if (failure == null) await _recordUsage(metrics);
     state = state.copyWith(status: ChatStatus.ready);
+  }
+
+  /// Writes this reply into the lifetime ledger.
+  ///
+  /// Separate from the session it was stored in on purpose: the session can
+  /// be deleted, and the work it represents still happened. Only successful
+  /// replies count — a generation that failed has no throughput to average.
+  Future<void> _recordUsage(GenerationMetrics metrics) async {
+    // Leaving the chat mid-reply disposes this notifier; reaching for a
+    // provider through a dead ref throws.
+    if (!ref.mounted) return;
+
+    final model = ref.read(activeModelProvider);
+    if (model == null || metrics.tokenCount == 0) return;
+
+    await ref
+        .read(usageLedgerProvider.notifier)
+        .record(
+          UsageRecord(
+            at: DateTime.now(),
+            modelId: model.id,
+            modelName: model.name,
+            paramLabel: model.paramLabel,
+            quantization: model.quantization,
+            tokenCount: metrics.tokenCount,
+            latencyMs: metrics.latencyMs,
+            tokensPerSecond: metrics.tokensPerSecond,
+          ),
+        );
   }
 
   /// Consumes the token stream. Returns an error description, or `null`.

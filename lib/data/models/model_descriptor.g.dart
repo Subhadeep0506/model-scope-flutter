@@ -16,6 +16,7 @@ ModelDescriptor _$ModelDescriptorFromJson(Map<String, dynamic> json) =>
       localPath: json['local_path'] as String,
       installedAt: DateTime.parse(json['installed_at'] as String),
       paramLabel: json['param_label'] as String?,
+      isEmbedding: json['is_embedding'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$ModelDescriptorToJson(ModelDescriptor instance) =>
@@ -28,4 +29,5 @@ Map<String, dynamic> _$ModelDescriptorToJson(ModelDescriptor instance) =>
       'local_path': instance.localPath,
       'installed_at': instance.installedAt.toIso8601String(),
       'param_label': instance.paramLabel,
+      'is_embedding': instance.isEmbedding,
     };

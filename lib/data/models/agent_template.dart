@@ -18,9 +18,12 @@ enum AgentInputType {
   @JsonValue('choice')
   choice('Choice'),
 
-  /// A file the user picks. Nothing in this build consumes one — no PDF or OCR
-  /// tool exists yet — so a step reading it gets the path as text. It is in the
-  /// format now so templates written today do not need rewriting later.
+  /// A file the user picks, through a real picker on the run screen.
+  ///
+  /// A template declaring one is indexed before its pipeline runs — see
+  /// `AgentRunViewModel.run` — which is how Document QnA gets its document
+  /// into the vector store. A step reading `input.<name>` still gets the path
+  /// as text.
   @JsonValue('file')
   file('File');
 
@@ -182,6 +185,7 @@ class AgentTemplate {
     this.icon = 'robot',
     this.inputs = const <AgentInput>[],
     this.createdAt,
+    this.temperature,
   });
 
   factory AgentTemplate.fromJson(Map<String, dynamic> json) =>
@@ -229,6 +233,15 @@ class AgentTemplate {
   /// app and has no creation date of its own.
   final DateTime? createdAt;
 
+  /// What to sample this agent at, overriding the low default a run uses.
+  ///
+  /// Null means take the default, which is right for the tool-calling agents:
+  /// a step is instruction-following, and sampling loosely there only makes a
+  /// small model ignore the tool. An agent that writes prose from retrieved
+  /// material wants a little more, and an input named `temperature` overrides
+  /// this again per run.
+  final double? temperature;
+
   /// Every tool this agent can reach, in pipeline order and without repeats —
   /// the mono chips on the agent card.
   List<String> get toolNames {
@@ -242,6 +255,15 @@ class AgentTemplate {
 
   /// Steps plus the answer, which is what the trace counts.
   int get stepCount => pipeline.length + 1;
+
+  /// The file input this agent takes, or null when it takes none. A template
+  /// with one is indexed before its pipeline runs.
+  AgentInput? get fileInput {
+    for (final input in inputs) {
+      if (input.type == AgentInputType.file) return input;
+    }
+    return null;
+  }
 
   AgentInput? inputNamed(String name) {
     for (final input in inputs) {

@@ -1,7 +1,12 @@
+import '../../data/repositories/document_index_repository.dart';
+import '../services/embedding_service.dart';
 import '../services/firecrawl_web_crawler_service.dart';
+import '../services/open_meteo_weather_service.dart';
 import '../services/tavily_web_search_service.dart';
 import 'calc_tools.dart';
+import 'document_tools.dart';
 import 'tool_definition.dart';
+import 'weather_tools.dart';
 import 'web_tools.dart';
 
 typedef ToolBlocker = String;
@@ -18,9 +23,22 @@ class ToolRegistry {
   factory ToolRegistry.standard({
     required TavilyWebSearchService search,
     required FirecrawlWebCrawlerService crawler,
+    required OpenMeteoWeatherService weather,
+    required DocumentIndexRepository documents,
+    required EmbeddingService embedder,
+    required RetrievalSettings retrieval,
+    required Future<bool> Function() hasEmbeddingModel,
   }) => ToolRegistry(
     tools: <ToolDefinition>[
       ...webTools(search: search, crawler: crawler),
+      // No readiness entry and no blocker: Open-Meteo needs no key, so this
+      // one can never be gated on Settings.
+      weatherTool(weather),
+      searchDocumentTool(
+        index: documents,
+        embedder: embedder,
+        settings: retrieval,
+      ),
       calculatorTool(),
       dateMathTool(),
       unitConvertTool(),
@@ -28,10 +46,15 @@ class ToolRegistry {
     readiness: <String, Future<bool> Function()>{
       'web_search': () => search.isConfigured,
       'read_web_page': () => crawler.isConfigured,
+      // Gated on the model, not on the index: the document is picked as an
+      // input on the run screen, so an empty index before a run is the
+      // ordinary state rather than a problem to report.
+      'search_document': hasEmbeddingModel,
     },
     blockers: const <String, ToolBlocker>{
       'web_search': 'Needs Tavily key — set it in Settings',
       'read_web_page': 'Needs Firecrawl key — set it in Settings',
+      'search_document': 'Needs an embedding model — download one in Settings',
     },
   );
 

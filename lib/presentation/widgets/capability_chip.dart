@@ -18,6 +18,7 @@ class CapabilityChip extends StatelessWidget {
     ModelCapability.textToText => Icons.notes_rounded,
     ModelCapability.imageToText => Icons.image_outlined,
     ModelCapability.toolCalling => Icons.build_outlined,
+    ModelCapability.textEmbedding => Icons.scatter_plot_outlined,
   };
 
   @override

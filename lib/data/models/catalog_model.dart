@@ -12,7 +12,13 @@ enum ModelCapability {
   @JsonValue('image_to_text')
   imageToText('Image to text'),
   @JsonValue('tool_calling')
-  toolCalling('Tool calling');
+  toolCalling('Tool calling'),
+
+  /// Turns text into vectors for the Document QnA agent. Not a chat model:
+  /// one of these can never answer a question, so it is kept out of every
+  /// model picker. See [CatalogModel.isEmbedding].
+  @JsonValue('text_embedding')
+  textEmbedding('Embedding');
 
   const ModelCapability(this.label);
 
@@ -65,6 +71,11 @@ class CatalogModel {
   }
 
   bool has(ModelCapability capability) => capabilities.contains(capability);
+
+  /// Whether this encodes text rather than answering it. Such a model is
+  /// downloaded and deleted like any other, but must never be offered as the
+  /// model a chat or an agent runs on.
+  bool get isEmbedding => has(ModelCapability.textEmbedding);
 
   @override
   bool operator ==(Object other) =>

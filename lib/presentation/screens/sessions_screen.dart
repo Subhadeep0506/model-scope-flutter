@@ -36,7 +36,7 @@ class SessionsScreen extends ConsumerWidget {
               ),
               child: SessionsHeader(
                 count: visible.length,
-                onCreate: () => _create(context, ref),
+                onCreate: () => createSession(context, ref),
               ),
             ),
             Padding(
@@ -50,7 +50,13 @@ class SessionsScreen extends ConsumerWidget {
                 AsyncLoading() when !sessions.hasValue => const Center(
                   child: CircularProgressIndicator(),
                 ),
-                _ => _SessionList(sessions: visible),
+                // `visible` is what the filters left; `stored` is whether
+                // there is anything at all. The two empty states read
+                // differently, so the list needs both.
+                _ => _SessionList(
+                  sessions: visible,
+                  stored: sessions.value?.length ?? 0,
+                ),
               },
             ),
           ],
@@ -58,23 +64,31 @@ class SessionsScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final router = GoRouter.of(context);
-    final session = await ref.read(sessionsViewModelProvider.notifier).create();
-    router.push(Routes.sessionOf(session.id));
-  }
+/// Starts a chat and opens it. Shared by the header's `+` and the button on
+/// the empty state, so both do exactly the same thing.
+Future<void> createSession(BuildContext context, WidgetRef ref) async {
+  final router = GoRouter.of(context);
+  final session = await ref.read(sessionsViewModelProvider.notifier).create();
+  router.push(Routes.sessionOf(session.id));
 }
 
 class _SessionList extends ConsumerWidget {
-  const _SessionList({required this.sessions});
+  const _SessionList({required this.sessions, required this.stored});
 
   final List<ChatSession> sessions;
+
+  /// How many sessions exist before filtering, which is what separates "none
+  /// yet" from "none of them match".
+  final int stored;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (sessions.isEmpty) {
-      return const _Message(text: 'No sessions match those filters.');
+      return stored == 0
+          ? const _NoChatsYet()
+          : const _Message(text: 'No sessions match those filters.');
     }
 
     final metrics = context.metrics;
@@ -135,6 +149,53 @@ class _SessionList extends ConsumerWidget {
     if (confirmed ?? false) {
       await ref.read(sessionsViewModelProvider.notifier).delete(session.id);
     }
+  }
+}
+
+/// What a fresh install shows. Nothing is seeded any more, so this is the
+/// first thing a new user sees on the Chat tab — and it has to offer the way
+/// in, not just report that there is nothing here.
+class _NoChatsYet extends ConsumerWidget {
+  const _NoChatsYet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final metrics = context.metrics;
+    final palette = context.palette;
+
+    return Padding(
+      padding: EdgeInsets.all(metrics.pagePadding),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(
+            Icons.chat_bubble_outline_rounded,
+            size: 40,
+            color: palette.muted,
+          ),
+          SizedBox(height: metrics.gapLg),
+          Text('No chats yet', style: Theme.of(context).textTheme.titleMedium),
+          SizedBox(height: metrics.gapSm),
+          Text(
+            'Start one to try a model you have installed.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.muted),
+          ),
+          SizedBox(height: metrics.gapXl),
+          FilledButton.icon(
+            onPressed: () => createSession(context, ref),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Start a chat'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              padding: EdgeInsets.symmetric(horizontal: metrics.gapXl),
+              shape: RoundedRectangleBorder(borderRadius: metrics.controlShape),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -270,4 +270,55 @@ void main() {
       check(await client.batchErrors(apiKey: 'k', jobId: 'job-7')).isEmpty();
     });
   });
+
+  group('creditUsage', () {
+    Map<String, Object?> creditsBody({Object? remaining = 3588}) =>
+        <String, Object?>{
+          'success': true,
+          'data': <String, Object?>{
+            'remainingCredits': remaining,
+            'planCredits': 500000,
+          },
+        };
+
+    test('asks the billing endpoint, which bills nothing', () async {
+      http.BaseRequest? sent;
+      final client = clientReturning(creditsBody(), onRequest: (r) => sent = r);
+
+      await client.creditUsage(apiKey: 'fc-secret');
+
+      // Deliberately not /v2/scrape: verifying a key must not spend a credit.
+      check(sent?.url.toString())
+          .equals('https://api.firecrawl.dev/v2/team/credit-usage');
+      check(sent?.method).equals('GET');
+      check(sent?.headers['Authorization']).equals('Bearer fc-secret');
+    });
+
+    test('reads what is left on the key', () async {
+      final client = clientReturning(creditsBody());
+
+      final credits = await client.creditUsage(apiKey: 'k');
+
+      check(credits.remaining).equals(3588);
+      check(credits.planCredits).equals(500000);
+    });
+
+    test('names the key when Firecrawl rejects it', () async {
+      final client = clientReturning(<String, Object?>{}, status: 401);
+
+      await check(client.creditUsage(apiKey: 'bad'))
+          .throws<FirecrawlApiException>(
+            (it) => it.has((e) => e.message, 'message').contains('Settings'),
+          );
+    });
+
+    test('a reply with no figure in it is not a pass', () async {
+      final client = clientReturning(creditsBody(remaining: null));
+
+      await check(client.creditUsage(apiKey: 'k'))
+          .throws<FirecrawlApiException>(
+            (it) => it.has((e) => e.message, 'message').contains('credits'),
+          );
+    });
+  });
 }

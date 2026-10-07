@@ -20,7 +20,7 @@ void main() {
       );
 
   group('SessionsViewModel', () {
-    test('seeds one session on first launch and saves it', () async {
+    test('starts empty on a first launch and writes nothing', () async {
       final repository = FakeSessionRepository();
       final container = ProviderContainer.test(
         overrides: fakeOverrides(llm: FakeLlmService(), sessions: repository),
@@ -28,13 +28,13 @@ void main() {
 
       final loaded = await container.read(sessionsViewModelProvider.future);
 
-      // The Chats list is never empty on a fresh install.
-      check(loaded).length.equals(1);
-      check(loaded.single.title).equals(SessionsViewModel.untitled);
-      check(repository.stored).length.equals(1);
+      // Nothing is seeded: the Chats screen offers a button instead, and a
+      // fresh install touches the store only once the user starts a chat.
+      check(loaded).isEmpty();
+      check(repository.stored).isEmpty();
     });
 
-    test('does not seed when sessions already exist', () async {
+    test('loads the sessions that exist', () async {
       final container = containerWith(<ChatSession>[sessionWith(id: 'a')]);
 
       final loaded = await container.read(sessionsViewModelProvider.future);

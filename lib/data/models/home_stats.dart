@@ -1,9 +1,13 @@
 import 'byte_size.dart';
 
-/// Everything the Home dashboard draws. Nothing here is persisted; every figure
-/// is folded out of the stored sessions and the model library each time Home
-/// builds, so deleting a session lowers the totals — hence the captions saying
-/// "across stored sessions" rather than "lifetime".
+/// Everything the Home dashboard draws, rebuilt each time Home builds.
+///
+/// The figures come from two different places, and which is which matters.
+/// Performance — tokens, latency, throughput, per-model usage, agent runs —
+/// is folded out of the persisted usage ledger, so it is lifetime and
+/// deleting a chat does not lower it. Counts of what exists — [sessionCount],
+/// [modelCount], [modelBytes], the session rows in [activity] — come from the
+/// sessions and the model library, so they stay honest about the device.
 class HomeStats {
   const HomeStats({
     required this.totalTokens,
@@ -37,7 +41,7 @@ class HomeStats {
     activity: <ActivityEntry>[],
   );
 
-  /// Tokens across every finished reply still on the device.
+  /// Tokens across every reply this device has ever finished.
   final int totalTokens;
 
   /// Mean time to first token, in milliseconds.
@@ -63,14 +67,16 @@ class HomeStats {
   /// Mean throughput per parameter size, smallest model first.
   final List<SizeThroughput> throughputBySize;
 
-  /// Installed models, the ones that have answered something first.
+  /// Every model that has answered something, busiest first, then the
+  /// installed ones that have not.
   final List<ModelUsage> modelUsage;
 
   /// Sessions and downloads merged, newest first.
   final List<ActivityEntry> activity;
 
-  /// Agent runs still in the history file. Capped like the file is, so this
-  /// is "recorded", not "ever".
+  /// Every agent run this device has finished. Counted in the ledger rather
+  /// than from the run history file, which is capped at fifty — so this is
+  /// "ever", unlike the traces behind it.
   final int agentRuns;
 
   /// Agents this build offers, bundled and custom together.
@@ -116,6 +122,7 @@ class ModelUsage {
     required this.runs,
     required this.averageLatencyMs,
     required this.lastUsedAt,
+    this.isInstalled = true,
   });
 
   final String modelId;
@@ -130,6 +137,11 @@ class ModelUsage {
 
   /// Null when [runs] is zero.
   final DateTime? lastUsedAt;
+
+  /// Whether the weights are still on the device. A removed model keeps its
+  /// row — the replies it produced still happened — but the row says so, so
+  /// the list is not read as an inventory.
+  final bool isInstalled;
 }
 
 /// What kind of thing happened, which picks the glyph on an activity row.

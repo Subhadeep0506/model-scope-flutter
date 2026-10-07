@@ -60,6 +60,20 @@ void main() {
         .isNotEmpty();
   });
 
+  testWidgets('back sits to the left of the title, as it does on a phone', (
+    tester,
+  ) async {
+    await pumpDetail(tester);
+
+    final back = tester.getCenter(find.byIcon(Icons.arrow_back_rounded));
+    final title = tester.getTopLeft(find.text('Test Agent'));
+
+    check(
+      because: 'back must not be stranded on the right',
+      back.dx,
+    ).isLessThan(title.dx);
+  });
+
   testWidgets('offers the model and the inputs before a run', (tester) async {
     await pumpDetail(tester);
 

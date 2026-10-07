@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "document_qna",
+  "name": "Document QnA",
+  "purpose": "Answer questions about a document you supply",
+  "description": "Reads a .txt, .md or PDF file, splits it into passages and encodes each one with an embedding model into a local vector database on this device. At run time it retrieves the passages closest in meaning to your question and answers from those alone. Nothing leaves the phone. Tests whether a small model can stay inside retrieved material instead of filling gaps from memory.",
+  "icon": "document",
+  "temperature": 0.3,
+  "system_prompt": "You are a careful reader answering questions about one document. Work only from the passages the search tool returns - never from memory, and never from what the question seems to assume. Quote the document's own wording for anything specific. When the passages do not settle the question, say so plainly rather than guessing.",
+  "inputs": [
+    {
+      "name": "document",
+      "label": "Document",
+      "type": "file",
+      "required": true
+    },
+    {
+      "name": "question",
+      "label": "Question",
+      "type": "text",
+      "default": "What is this document about, and what does it conclude?",
+      "required": true
+    },
+    {
+      "name": "top_k",
+      "label": "Passages to retrieve",
+      "type": "number",
+      "default": "4",
+      "required": false
+    },
+    {
+      "name": "temperature",
+      "label": "Temperature",
+      "type": "number",
+      "default": "0.3",
+      "required": false
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "retrieve",
+      "kind": "tool",
+      "tool": "search_document",
+      "reads": [],
+      "prompt": "Call the search_document tool, passing this question through exactly as written: {{input.question}}"
+    }
+  ],
+  "answer": {
+    "prompt": "Answer this question using only the passages above: {{input.question}}. Keep the document's own figures and wording for anything specific, and say which passage each point came from. If the passages do not answer it, say exactly what is missing instead of filling the gap.",
+    "reads": ["step.retrieve"]
+  }
+}

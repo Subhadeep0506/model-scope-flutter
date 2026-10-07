@@ -98,7 +98,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   }
 }
 
-/// Back, the tool names in mono caps, and the agent's name.
+/// Back on the left, then the tool names in mono caps and the agent's name.
 class _Header extends ConsumerWidget {
   const _Header({required this.state});
 
@@ -114,6 +114,13 @@ class _Header extends ConsumerWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        SquareIconButton(
+          icon: Icons.arrow_back_rounded,
+          label: 'Back to the agent bench',
+          borderColor: palette.outline,
+          onPressed: () => _back(context, ref),
+        ),
+        SizedBox(width: metrics.gapMd),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,13 +142,6 @@ class _Header extends ConsumerWidget {
               ),
             ],
           ),
-        ),
-        SizedBox(width: metrics.gapMd),
-        SquareIconButton(
-          icon: Icons.arrow_back_rounded,
-          label: 'Back to the agent bench',
-          borderColor: palette.outline,
-          onPressed: () => _back(context, ref),
         ),
       ],
     );
@@ -201,6 +201,7 @@ class _Body extends ConsumerWidget {
         if (state.viewing == null)
           AgentRunButton(
             isRunning: state.isRunning,
+            isIndexing: state.status == AgentRunStatus.indexing,
             usesDefaults: state.usesDefaults,
             enabled: state.canRun && state.status != AgentRunStatus.blocked,
             onRun: notifier.run,

@@ -78,7 +78,7 @@ class _SessionFilterBarState extends ConsumerState<SessionFilterBar> {
     final library = ref.watch(modelLibraryViewModelProvider).value;
     return <FilterOption<String?>>[
       (value: null, label: 'All models'),
-      for (final model in library?.models ?? const <ModelDescriptor>[])
+      for (final model in library?.chatModels ?? const <ModelDescriptor>[])
         (value: model.id, label: model.name),
     ];
   }

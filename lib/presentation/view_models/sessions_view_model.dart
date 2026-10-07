@@ -12,16 +12,12 @@ class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
 
   static const Uuid _uuid = Uuid();
 
+  /// Nothing is seeded on a first launch: an empty Chats list says plainly
+  /// that there are no chats, where a blank "New chat" row only looked like
+  /// one the user had forgotten starting. The screen offers a button instead.
   @override
-  Future<List<ChatSession>> build() async {
-    final stored = await ref.read(sessionRepositoryProvider).load();
-    if (stored.isNotEmpty) return _sorted(stored);
-
-    // First launch: seed one session so the list is never empty.
-    final seed = _blank();
-    await ref.read(sessionRepositoryProvider).save(<ChatSession>[seed]);
-    return <ChatSession>[seed];
-  }
+  Future<List<ChatSession>> build() async =>
+      _sorted(await ref.read(sessionRepositoryProvider).load());
 
   /// Creates an empty session and returns it so the caller can navigate to it.
   Future<ChatSession> create() async {

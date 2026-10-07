@@ -57,6 +57,7 @@ void main() {
     WidgetTester tester, {
     List<ChatSession> sessions = const <ChatSession>[],
     FakeModelLibraryRepository? library,
+    FakeUsageRepository? usage,
     TextScaler textScaler = TextScaler.noScaling,
   }) async {
     tester.view.physicalSize = const Size(1200, 4800);
@@ -73,6 +74,10 @@ void main() {
           llm: FakeLlmService(),
           sessions: FakeSessionRepository(sessions),
           library: library,
+          // Unmigrated, so the seeded transcripts are folded into the ledger
+          // on first read exactly as they are on a real upgrade — which makes
+          // these tests cover the migration as well as the tiles.
+          usage: usage ?? FakeUsageRepository(migrated: false),
         ),
       ),
     );
@@ -128,8 +133,8 @@ void main() {
   testWidgets('a fresh install says so rather than drawing empty axes', (
     tester,
   ) async {
-    // Nothing chatted, nothing installed. The sessions view
-    // model still seeds one blank session, so the list is never empty.
+    // Nothing chatted, nothing installed, and nothing seeded — a first launch
+    // now really is empty.
     await pumpHome(tester, library: FakeModelLibraryRepository());
 
     check(valueOf(tester, 'TOKENS GENERATED')).equals('0');
@@ -141,9 +146,8 @@ void main() {
     check(find.text('No replies recorded yet.').evaluate()).length.equals(2);
     check(find.text('No models yet. Add one to start chatting.').evaluate())
         .isNotEmpty();
-    // The seeded session has no model, which is not the same as having lost one.
-    check(find.text('removed model · 0 messages').evaluate()).isEmpty();
-    check(find.text('no model · 0 messages').evaluate()).isNotEmpty();
+    // No session exists, so the feed has no session row to mislabel.
+    check(find.textContaining('· 0 messages').evaluate()).isEmpty();
   });
 
   testWidgets('lists the installed model and the recent activity', (

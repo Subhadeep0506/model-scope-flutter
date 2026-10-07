@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'config/di/providers.dart';
 import 'config/di/view_models.dart';
 import 'config/theme/app_theme.dart';
+import 'objectbox.g.dart';
 import 'presentation/widgets/system_bar_style.dart';
 
 Future<void> main() async {
@@ -17,8 +18,14 @@ Future<void> main() async {
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await NobodyWho.init();
   final documents = await getApplicationDocumentsDirectory();
+  // Opened once for the app's lifetime: the native store holds a file lock,
+  // so a second open while the first is live fails.
+  final store = await openStore(directory: '${documents.path}/document_index');
   final container = ProviderContainer(
-    overrides: [documentsDirectoryProvider.overrideWithValue(documents)],
+    overrides: [
+      documentsDirectoryProvider.overrideWithValue(documents),
+      objectBoxStoreProvider.overrideWithValue(store),
+    ],
   );
   container.read(downloadViewModelProvider);
   runApp(

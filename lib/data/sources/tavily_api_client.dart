@@ -18,11 +18,50 @@ class TavilyApiException implements Exception {
   String toString() => message;
 }
 
+/// What `/usage` says about a key: which plan it is on, and how much of the
+/// allowance it has spent this billing cycle. [limit] is null on an unlimited
+/// plan, which the caption words differently.
+class TavilyUsage {
+  const TavilyUsage({required this.plan, required this.used, this.limit});
+
+  final String plan;
+  final int used;
+  final int? limit;
+}
+
 /// Thin client over the Tavily search API.
 class TavilyApiClient {
   const TavilyApiClient(this._client);
   final http.Client _client;
   static const String _host = 'api.tavily.com';
+
+  /// Checks a key without spending any of it.
+  ///
+  /// `/usage` reports the billing cycle rather than searching, so it costs no
+  /// credits — which is the whole point of pointing Verify at it rather than
+  /// at `/search`.
+  Future<TavilyUsage> usage({required String apiKey}) async {
+    final response = await _get(Uri.https(_host, '/usage'), apiKey);
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) {
+      throw const TavilyApiException('Tavily returned an unexpected response.');
+    }
+
+    final key = body['key'];
+    final account = body['account'];
+    return TavilyUsage(
+      plan: account is Map<String, dynamic> && account['current_plan'] is String
+          ? account['current_plan'] as String
+          : 'unknown',
+      used: key is Map<String, dynamic> && key['usage'] is num
+          ? (key['usage'] as num).toInt()
+          : 0,
+      // Absent or null both mean no cap, which is what null carries here.
+      limit: key is Map<String, dynamic> && key['limit'] is num
+          ? (key['limit'] as num).toInt()
+          : null,
+    );
+  }
 
   Future<WebSearchResult> search({
     required String apiKey,
@@ -58,17 +97,29 @@ class TavilyApiClient {
     Uri uri,
     String apiKey,
     Map<String, Object?> body,
-  ) async {
+  ) => _send(
+    () => _client.post(
+      uri,
+      headers: <String, String>{
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    ),
+  );
+
+  Future<http.Response> _get(Uri uri, String apiKey) => _send(
+    () => _client.get(
+      uri,
+      headers: <String, String>{'Authorization': 'Bearer $apiKey'},
+    ),
+  );
+
+  /// Runs [request] and turns anything other than a 200 into a sentence.
+  Future<http.Response> _send(Future<http.Response> Function() request) async {
     final http.Response response;
     try {
-      response = await _client.post(
-        uri,
-        headers: <String, String>{
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      );
+      response = await request();
     } on SocketException {
       throw const TavilyApiException('No connection to Tavily.');
     } on http.ClientException catch (error) {
@@ -78,7 +129,7 @@ class TavilyApiClient {
     return switch (response.statusCode) {
       200 => response,
       400 || 422 => throw TavilyApiException(
-        'Tavily rejected the search: ${_detailOf(response.body)}',
+        'Tavily rejected the request: ${_detailOf(response.body)}',
       ),
       401 => throw const TavilyApiException(
         'That Tavily key was rejected. Check it under Settings, API keys.',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../config/theme/app_metrics.dart';
+import '../../config/theme/app_palette.dart';
 import '../../data/models/home_stats.dart';
 import '../../data/models/relative_time.dart';
 import 'icon_tile.dart';
@@ -10,7 +11,9 @@ import 'section_card.dart';
 
 /// One row of the Models used list: what a model is, how much work it has done
 /// and which quant answered. Models that have never answered appear at zero —
-/// an unused model on disk is a gigabyte the user may want back.
+/// an unused model on disk is a gigabyte the user may want back. A model that
+/// has been deleted keeps its row too, greyed and labelled: the replies it
+/// produced are still part of what this device has done.
 class ModelUsageCard extends StatelessWidget {
   const ModelUsageCard({super.key, required this.usage, required this.now});
 
@@ -31,7 +34,13 @@ class ModelUsageCard extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          const IconTile(icon: Icons.memory_rounded, size: 34, iconSize: 17),
+          IconTile(
+            icon: usage.isInstalled
+                ? Icons.memory_rounded
+                : Icons.history_rounded,
+            size: 34,
+            iconSize: 17,
+          ),
           SizedBox(width: metrics.gapMd),
           Expanded(
             child: Column(
@@ -42,7 +51,9 @@ class ModelUsageCard extends StatelessWidget {
                   usage.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: usage.isInstalled ? null : context.palette.muted,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 MonoLabel(_summary, maxLines: 1),
@@ -50,7 +61,7 @@ class ModelUsageCard extends StatelessWidget {
             ),
           ),
           SizedBox(width: metrics.gapSm),
-          MonoChip(usage.quantization),
+          MonoChip(usage.isInstalled ? usage.quantization : 'REMOVED'),
         ],
       ),
     );

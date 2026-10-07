@@ -196,4 +196,63 @@ void main() {
           );
     });
   });
+
+  group('usage', () {
+    Map<String, Object?> usageBody({Object? limit = 4000}) => <String, Object?>{
+      'key': <String, Object?>{'usage': 412, 'limit': limit},
+      'account': <String, Object?>{'current_plan': 'Bootstrap'},
+    };
+
+    test('asks the usage endpoint, which bills nothing', () async {
+      http.Request? sent;
+      final client = clientReturning(usageBody(), onRequest: (r) => sent = r);
+
+      await client.usage(apiKey: 'tvly-secret');
+
+      // Deliberately not /search: verifying a key must not spend a credit.
+      check(sent?.url.toString()).equals('https://api.tavily.com/usage');
+      check(sent?.method).equals('GET');
+      check(sent?.headers['Authorization']).equals('Bearer tvly-secret');
+    });
+
+    test('reads the plan and the spend', () async {
+      final client = clientReturning(usageBody());
+
+      final usage = await client.usage(apiKey: 'k');
+
+      check(usage.plan).equals('Bootstrap');
+      check(usage.used).equals(412);
+      check(usage.limit).equals(4000);
+    });
+
+    test('an unlimited plan reports no cap rather than zero', () async {
+      final client = clientReturning(usageBody(limit: null));
+
+      check((await client.usage(apiKey: 'k')).limit).isNull();
+    });
+
+    test('survives a response missing every field', () async {
+      final client = clientReturning(<String, Object?>{});
+
+      final usage = await client.usage(apiKey: 'k');
+
+      check(usage.plan).equals('unknown');
+      check(usage.used).equals(0);
+      check(usage.limit).isNull();
+    });
+
+    test('names the key when Tavily rejects it', () async {
+      final client = clientReturning(<String, Object?>{}, status: 401);
+
+      await check(client.usage(apiKey: 'bad')).throws<TavilyApiException>(
+        (it) => it.has((e) => e.message, 'message').contains('Settings'),
+      );
+    });
+
+    test('a response that is not an object is not a pass', () async {
+      final client = clientReturning(<String>['not', 'an', 'object']);
+
+      await check(client.usage(apiKey: 'k')).throws<TavilyApiException>();
+    });
+  });
 }

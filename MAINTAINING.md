@@ -17,13 +17,14 @@ Run these from the project root (`model_scope_flutter/`).
 | Run one test file | `flutter test test/domain/token_collector_test.dart` |
 | Tidy the formatting | `dart format lib test` |
 | Regenerate the `.g.dart` files | `dart run build_runner build` |
+| Regenerate after changing a database entity | `dart run build_runner build` (same command — it also writes `objectbox.g.dart`) |
 | Install a new package | `flutter pub add <name>` |
 
 **`flutter analyze .` always reports exactly 1 issue** — an empty `catch` in
 [app_cache_service.dart:18](lib/domain/services/app_cache_service.dart#L18). That
 one is deliberate and known. If you ever see **2** issues, your change caused it.
 
-**`flutter test` should say `572 passed`.** If the number drops, you broke
+**`flutter test` should say `683 passed`.** If the number drops, you broke
 something. If it rises, you added a test — good.
 
 There is nothing to run locally on this machine. The only way to see the app
@@ -287,9 +288,15 @@ screens. Put a new thing in the matching one.
 A **tool** is a job the model asks *you* to do mid-answer. It writes something
 like "call `web_search` with `query: flutter 4 release date`", the app runs the
 real work, and the text you hand back goes into the model's context as if it
-had always known it. Two exist so far, in
-[lib/domain/tools/web_tools.dart](lib/domain/tools/web_tools.dart): one searches
-the web, one reads a page.
+had always known it. Seven exist so far:
+
+| Tool | File | Needs |
+|---|---|---|
+| `web_search` | [web_tools.dart](lib/domain/tools/web_tools.dart) | Tavily key |
+| `read_web_page` | [web_tools.dart](lib/domain/tools/web_tools.dart) | Firecrawl key |
+| `get_weather` | [weather_tools.dart](lib/domain/tools/weather_tools.dart) | nothing — Open-Meteo is free |
+| `search_document` | [document_tools.dart](lib/domain/tools/document_tools.dart) | an embedding model installed |
+| `calculator`, `date_math`, `unit_convert` | [calc_tools.dart](lib/domain/tools/calc_tools.dart) | nothing |
 
 A tool is a plain Dart function wrapped in a
 [ToolDefinition](lib/domain/tools/tool_definition.dart):
@@ -322,8 +329,11 @@ Keep the output short. It is spent out of the same few thousand tokens the
 conversation lives in, which is why both web tools cut their text to a budget
 and say when they have.
 
-Register the tool in the list in
-[providers.dart](lib/config/di/providers.dart), under `webToolsProvider`. The
+Register the tool in `ToolRegistry.standard`
+([tool_registry.dart](lib/domain/tools/tool_registry.dart)). If it needs
+something to be set up first — a key, a downloaded model — add a `readiness`
+check and a `blockers` line there too; that is what puts the amber
+`Needs Tavily key` line on an agent card instead of letting the run fail. The
 one file that knows about `nobodywho` is
 [nobodywho_tools.dart](lib/domain/tools/nobodywho_tools.dart) — it turns these
 definitions into the thing the chat accepts. Everything else stays plain Dart,
@@ -450,14 +460,61 @@ built to measure tool calling.
    *"You did not call the X tool. Call it now."* The failed first attempt stays
    in the trace as an amber `— not called, retrying` row, because a model that
    has to be told twice is a worse model and hiding that defeats the point.
-3. **The sampler is low and fixed.** `SamplerSettings.forAgentRun()` pins
+3. **The sampler is low by default.** `SamplerSettings.forAgentRun()` pins
    temperature to `agentTemperature` (0.2) whatever the Chat sliders say, so two
-   runs of one agent differ because of the model rather than the sampler.
+   runs of one agent differ because of the model rather than the sampler. Two
+   things may raise it: a `"temperature"` field in the agent's own JSON file,
+   for an agent that writes prose rather than calling tools, and an input
+   literally named `temperature`, which lets you try one agent at several
+   settings without editing the file.
 
 Reasoning is also stripped everywhere it would travel: a step passes its answer
 to the next step, not its thinking, and `AgentRun.output` holds the answer
 alone. The raw text stays in the log, which is the one place it is worth
 reading.
+
+### Where the numbers on Home come from
+
+Two places, and which is which matters.
+
+**Performance figures** — tokens, latency, peak throughput, the two charts, the
+Models used list, the agent-run count — come from the **usage ledger**
+(`usage.json`, [usage_repository.dart](lib/data/repositories/usage_repository.dart)).
+It is append-only and nothing a user deletes ever lowers it. It is written at
+exactly two points: when a chat reply finishes, and when an agent run finishes.
+A device that chatted before the ledger existed has its stored sessions folded
+in once, on first read, so upgrading does not reset every tile to zero.
+
+**Counts of what exists** — how many sessions, how many models, how much disk —
+still come from the sessions and the model library, because a count of things on
+the device has to be honest about the device. So deleting a chat lowers
+`Sessions` and removes its row from the activity feed, and changes nothing else.
+
+A model whose weights have been deleted keeps its row in Models used, marked
+`REMOVED`: the replies it produced still happened.
+
+### The document index
+
+Document QnA keeps its passages in an **ObjectBox** vector database, opened once
+in `main()` and injected as `objectBoxStoreProvider`. The entities are in
+[vector_store.dart](lib/data/sources/vector_store.dart).
+
+Two things to know before changing it:
+
+1. **The vector width is fixed at build time.** `@HnswIndex(dimensions: 384)`
+   is a compile-time constant, so the catalog only offers 384-wide embedding
+   models (bge-small, all-MiniLM-L6, e5-small). Switching between them costs a
+   re-index, not a rebuild. Offering a 768-wide model would need a second
+   entity and a second index.
+2. **`flutter test` cannot load it.** ObjectBox is native code and the Dart VM
+   that runs the tests has no library to open, so every test substitutes
+   `FakeDocumentIndex`, which does the same search by brute force. The real
+   index is only exercised on the phone. Everything around it — chunking,
+   extraction, ranking, the tool's output — is tested for real.
+
+An embedding model is not a chat model and must never appear in a model picker.
+That is what `ModelLibrary.chatModels` is for; read it rather than `.models`
+anywhere you are offering the user something to run.
 
 ### Adding or changing a stored setting
 
@@ -587,8 +644,8 @@ the test folder. It contains stand-ins for everything real: the model, the disk,
 the keychain, the network, the downloader.
 
 `fakeOverrides(...)` hands you all of them at once with sensible defaults — one
-model installed, no sessions. Pass only the ones your test needs to be
-different:
+model installed, no sessions, an empty usage ledger already migrated, an empty
+document index. Pass only the ones your test needs to be different:
 
 ```dart
 // Default: one model installed.

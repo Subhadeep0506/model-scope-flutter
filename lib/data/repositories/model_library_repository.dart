@@ -14,6 +14,9 @@ class ModelLibrary {
 
   static const ModelLibrary empty = ModelLibrary();
 
+  /// Everything installed, embedding models included — which is what the
+  /// Settings list and the storage figure want. Anything offering a model to
+  /// answer with wants [chatModels] instead.
   final List<ModelDescriptor> models;
 
   /// Installed vision projectors, at most one per repository.
@@ -22,6 +25,26 @@ class ModelLibrary {
   /// Id of the model Chat loads. Null when nothing is installed.
   final String? activeId;
   bool get isEmpty => models.isEmpty;
+
+  /// Models that can answer a question. An embedding model cannot — it turns
+  /// text into vectors — so offering one in a picker would let the user
+  /// select a model that is certain to fail.
+  List<ModelDescriptor> get chatModels => <ModelDescriptor>[
+    for (final model in models)
+      if (!model.isEmbedding) model,
+  ];
+
+  /// Models that can encode text for the document index.
+  List<ModelDescriptor> get embeddingModels => <ModelDescriptor>[
+    for (final model in models)
+      if (model.isEmbedding) model,
+  ];
+
+  /// The embedding model the document index uses, or null when none is
+  /// installed. The first, since nothing yet lets the user choose between
+  /// two — they are interchangeable at the same vector width.
+  ModelDescriptor? get embeddingModel =>
+      embeddingModels.isEmpty ? null : embeddingModels.first;
 
   /// Total bytes on disk, behind the `Models · 8.06 GB` heading. Projectors
   /// count: they are downloaded here and deleted here, so hiding them would
@@ -124,11 +147,14 @@ class ModelLibraryRepository {
       return library;
     }
     // Built rather than copied: copyWith reads a null activeId as "keep", and
-    // clearing it is exactly what an empty library needs.
+    // clearing it is exactly what an empty library needs. The replacement is
+    // drawn from the chat models — an embedding model cannot answer, so
+    // falling back to one would make Chat fail on every message.
+    final chat = library.chatModels;
     final repaired = ModelLibrary(
       models: present,
       projectors: projectors,
-      activeId: present.isEmpty ? null : present.first.id,
+      activeId: chat.isEmpty ? null : chat.first.id,
     );
     await save(repaired);
     return repaired;

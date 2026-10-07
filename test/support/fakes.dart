@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,7 @@ import 'package:model_scope_flutter/data/models/hf_repo_summary.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
 import 'package:model_scope_flutter/data/models/projector_descriptor.dart';
 import 'package:model_scope_flutter/data/models/sampler_settings.dart';
+import 'package:model_scope_flutter/data/models/usage_record.dart';
 import 'package:model_scope_flutter/data/repositories/agent_repository.dart';
 import 'package:model_scope_flutter/data/repositories/agent_run_repository.dart';
 import 'package:model_scope_flutter/data/repositories/api_key_repository.dart';
@@ -30,6 +32,11 @@ import 'package:model_scope_flutter/data/repositories/hugging_face_repository.da
 import 'package:model_scope_flutter/data/repositories/model_library_repository.dart';
 import 'package:model_scope_flutter/data/repositories/session_repository.dart';
 import 'package:model_scope_flutter/data/repositories/settings_repository.dart';
+import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
+import 'package:model_scope_flutter/data/repositories/usage_repository.dart';
+import 'package:model_scope_flutter/data/sources/vector_store.dart';
+import 'package:model_scope_flutter/domain/services/document_picker.dart';
+import 'package:model_scope_flutter/domain/services/embedding_service.dart';
 import 'package:model_scope_flutter/data/sources/secure_key_store.dart';
 import 'package:model_scope_flutter/domain/services/app_cache_service.dart';
 import 'package:model_scope_flutter/domain/services/attachment_picker.dart';
@@ -403,6 +410,115 @@ class FakeAgentRunRepository implements AgentRunRepository {
   }
 }
 
+/// An [EmbeddingService] that encodes without weights.
+///
+/// Vectors are derived from the text deterministically, so a test can assert
+/// that the nearest passage really is the one about the same words — without
+/// a hundred megabytes of model to make it so.
+class FakeEmbeddingService implements EmbeddingService {
+  FakeEmbeddingService({this.loadFailure, this.encodeFailure});
+
+  /// Thrown by [load], for the missing-weights path.
+  Object? loadFailure;
+
+  /// Thrown by [encode].
+  Object? encodeFailure;
+
+  final List<List<String>> encoded = <List<String>>[];
+  int loadCalls = 0;
+  int disposeCalls = 0;
+
+  String? _loadedModelId;
+
+  @override
+  bool get isLoaded => _loadedModelId != null;
+
+  @override
+  String? get loadedModelId => _loadedModelId;
+
+  @override
+  Future<void> load(ModelDescriptor model) async {
+    loadCalls++;
+    final Object? error = loadFailure;
+    if (error != null) throw error;
+    _loadedModelId = model.id;
+  }
+
+  @override
+  Future<List<List<double>>> encode(List<String> texts) async {
+    encoded.add(List<String>.unmodifiable(texts));
+    final Object? error = encodeFailure;
+    if (error != null) throw error;
+    return <List<double>>[for (final text in texts) fakeVector(text)];
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls++;
+    _loadedModelId = null;
+  }
+}
+
+/// A unit-length vector derived from [text]'s words.
+///
+/// A bag of words hashed into buckets: two passages sharing words point in
+/// similar directions, which is the property retrieval is being tested on.
+List<double> fakeVector(String text) {
+  final vector = List<double>.filled(kEmbeddingDimensions, 0);
+  for (final word in text.toLowerCase().split(RegExp(r'[^a-z0-9]+'))) {
+    if (word.isEmpty) continue;
+    vector[word.hashCode.abs() % kEmbeddingDimensions] += 1;
+  }
+
+  var sum = 0.0;
+  for (final value in vector) {
+    sum += value * value;
+  }
+  if (sum == 0) return vector..[0] = 1.0;
+
+  final length = math.sqrt(sum);
+  return <double>[for (final value in vector) value / length];
+}
+
+/// A [UsageRepository] held in memory.
+///
+/// Seeded as already migrated by default, so a test does not pay for the
+/// one-time import of stored sessions unless it is the thing being tested.
+class FakeUsageRepository implements UsageRepository {
+  FakeUsageRepository({UsageLedger? seed, bool migrated = true})
+    : stored = (seed ?? UsageLedger.empty).copyWith(migrated: migrated);
+
+  UsageLedger stored;
+
+  /// Every record handed to [add], in order.
+  final List<UsageRecord> recorded = <UsageRecord>[];
+
+  /// What [importOnce] was given, or null when it was never reached.
+  List<UsageRecord>? imported;
+
+  @override
+  Future<UsageLedger> load() async => stored;
+
+  @override
+  Future<UsageLedger> add(UsageRecord record) async {
+    recorded.add(record);
+    return stored = stored.plus(record);
+  }
+
+  @override
+  Future<UsageLedger> importOnce(List<UsageRecord> records) async {
+    if (stored.migrated) return stored;
+    imported = records;
+    for (final record in records) {
+      stored = stored.plus(record);
+    }
+    return stored = stored.copyWith(migrated: true);
+  }
+
+  @override
+  Future<void> save(UsageLedger ledger) async => stored = ledger;
+}
+
 /// An [AppSettingsRepository] held in memory.
 class FakeAppSettingsRepository implements AppSettingsRepository {
   FakeAppSettingsRepository([this.stored = const AppSettings()]);
@@ -660,6 +776,10 @@ List<Override> fakeOverrides({
   FakeAppCacheService? cache,
   FakeAgentRepository? agents,
   FakeAgentRunRepository? agentRuns,
+  FakeUsageRepository? usage,
+  FakeDocumentIndex? documents,
+  FakeEmbeddingService? embedder,
+  FakeDocumentPicker? documentPicker,
   ToolRegistry? tools,
 }) => <Override>[
   documentsDirectoryProvider.overrideWithValue(Directory.systemTemp),
@@ -700,8 +820,112 @@ List<Override> fakeOverrides({
   agentRunRepositoryProvider.overrideWithValue(
     agentRuns ?? FakeAgentRunRepository(),
   ),
+  // In memory, and already migrated: the real one reads and writes a file on
+  // every recorded reply, which no test about anything else should pay for.
+  usageRepositoryProvider.overrideWithValue(usage ?? FakeUsageRepository()),
+  // The real index is native code the Dart VM cannot load under
+  // `flutter test`, so it is replaced everywhere rather than per test.
+  documentIndexRepositoryProvider.overrideWithValue(
+    documents ?? FakeDocumentIndex(),
+  ),
+  embeddingServiceProvider.overrideWithValue(
+    embedder ?? FakeEmbeddingService(),
+  ),
+  documentPickerProvider.overrideWithValue(
+    documentPicker ?? FakeDocumentPicker(),
+  ),
   toolRegistryProvider.overrideWithValue(tools ?? fakeToolRegistry()),
 ];
+
+/// A [DocumentPicker] that returns [path] without a platform dialog, or null
+/// to stand for the user cancelling.
+class FakeDocumentPicker implements DocumentPicker {
+  FakeDocumentPicker([this.path]);
+
+  String? path;
+  int pickCalls = 0;
+
+  @override
+  Future<String?> pick() async {
+    pickCalls++;
+    return path;
+  }
+}
+
+/// A [DocumentIndexRepository] held in memory, searched by brute force.
+///
+/// ObjectBox's vector search is native code, and `flutter test` runs on the
+/// Dart VM where that library is not loadable — so the real index can only be
+/// exercised on the device. What this stands in for is only the HNSW lookup:
+/// everything around it, ordering included, is the same, because cosine
+/// distance over a handful of chunks is what the index approximates anyway.
+class FakeDocumentIndex implements DocumentIndexRepository {
+  final List<DocumentChunk> chunks = <DocumentChunk>[];
+  final List<IngestedDocument> stored = <IngestedDocument>[];
+
+  int clearCalls = 0;
+
+  @override
+  List<IngestedDocument> documents() => stored;
+
+  @override
+  IngestedDocument? documentOf(String docId) {
+    for (final document in stored) {
+      if (document.docId == docId) return document;
+    }
+    return null;
+  }
+
+  @override
+  int chunkCount() => chunks.length;
+
+  @override
+  void replaceWith(IngestedDocument document, List<DocumentChunk> rows) {
+    chunks
+      ..clear()
+      ..addAll(rows);
+    stored
+      ..clear()
+      ..add(document);
+  }
+
+  @override
+  List<RetrievedChunk> search(List<double> vector, {int topK = 4}) {
+    if (vector.length != kEmbeddingDimensions) return const <RetrievedChunk>[];
+
+    final titles = <String, String>{
+      for (final document in stored) document.docId: document.title,
+    };
+    final scored = <RetrievedChunk>[
+      for (final chunk in chunks)
+        RetrievedChunk(
+          text: chunk.text,
+          ordinal: chunk.ordinal,
+          title: titles[chunk.docId] ?? 'the document',
+          // Distance, not similarity: smaller is closer, as ObjectBox
+          // reports it.
+          score: 1 - _dot(vector, chunk.embedding),
+        ),
+    ]..sort((a, b) => a.score.compareTo(b.score));
+
+    return scored.take(topK.clamp(1, 50)).toList();
+  }
+
+  @override
+  void clear() {
+    clearCalls++;
+    chunks.clear();
+    stored.clear();
+  }
+
+  static double _dot(List<double> a, List<double> b) {
+    var total = 0.0;
+    for (var i = 0; i < a.length && i < b.length; i++) {
+      total += a[i] * b[i];
+    }
+    return total;
+  }
+}
 
 /// A registry of tools that do nothing, named as the bundled agents name them.
 /// The runner never calls a tool itself — the model does, inside the backend —
@@ -748,6 +972,7 @@ AgentTemplate fakeAgentTemplate({
   List<AgentInput>? inputs,
   List<PipelineStep>? pipeline,
   AnswerStep? answer,
+  double? temperature,
 }) => AgentTemplate(
   id: id,
   name: name,
@@ -755,6 +980,7 @@ AgentTemplate fakeAgentTemplate({
   description: description,
   icon: icon,
   systemPrompt: systemPrompt,
+  temperature: temperature,
   inputs:
       inputs ??
       const <AgentInput>[
@@ -776,6 +1002,60 @@ AgentTemplate fakeAgentTemplate({
         prompt: 'Answer from the search results.',
         reads: <String>['step.search'],
       ),
+);
+
+/// A Document QnA shaped template: one file input, a retrieval step, and the
+/// `top_k` and `temperature` inputs the run reads.
+AgentTemplate fakeDocumentAgent({double? temperature}) => fakeAgentTemplate(
+  id: 'document_qna',
+  name: 'Document QnA',
+  temperature: temperature,
+  inputs: const <AgentInput>[
+    AgentInput(name: 'document', label: 'Document', type: AgentInputType.file),
+    AgentInput(
+      name: 'question',
+      label: 'Question',
+      defaultValue: 'What does it conclude?',
+    ),
+    AgentInput(
+      name: 'top_k',
+      label: 'Passages to retrieve',
+      type: AgentInputType.number,
+      defaultValue: '4',
+      required: false,
+    ),
+    AgentInput(
+      name: 'temperature',
+      label: 'Temperature',
+      type: AgentInputType.number,
+      required: false,
+    ),
+  ],
+  pipeline: const <PipelineStep>[
+    PipelineStep(
+      id: 'retrieve',
+      kind: StepKind.tool,
+      tool: 'search_document',
+      prompt: 'Search for {{input.question}}.',
+    ),
+  ],
+  answer: const AnswerStep(
+    prompt: 'Answer from the passages.',
+    reads: <String>['step.retrieve'],
+  ),
+);
+
+/// An installed embedding model, which Document QnA refuses to run without.
+ModelDescriptor fakeEmbeddingModel() => ModelDescriptor(
+  repoId: 'CompendiumLabs/bge-small-en-v1.5-gguf',
+  fileName: 'bge-small-en-v1.5-q8_0.gguf',
+  name: 'BGE Small EN v1.5',
+  quantization: 'Q8_0',
+  sizeBytes: 36 * 1000 * 1000,
+  localPath: '/cache/bge-small-en-v1.5-q8_0.gguf',
+  installedAt: DateTime(2026, 10, 6, 9),
+  paramLabel: '33M',
+  isEmbedding: true,
 );
 
 /// A catalog saying the model [fakeInstalledModel] installs can call tools.

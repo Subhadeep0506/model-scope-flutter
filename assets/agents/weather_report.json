@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "weather_report",
+  "name": "Weather Report",
+  "purpose": "Compare the weather across several places",
+  "description": "Fetches current conditions and a three-day forecast for every place you name, then writes one report comparing them. Needs no API key. Tests whether a model can pass a list through a tool unchanged and then reason across the rows it gets back rather than from memory.",
+  "icon": "weather",
+  "system_prompt": "You are a precise weather reporter. Use only the figures the tool returned - never estimate a temperature and never recall one from training. Every place you mention must appear in the tool output. When a place could not be found, say so plainly instead of guessing.",
+  "inputs": [
+    {
+      "name": "locations",
+      "label": "Places",
+      "type": "text",
+      "default": "London, Tokyo, New York",
+      "required": true
+    },
+    {
+      "name": "units",
+      "label": "Units",
+      "type": "choice",
+      "options": ["metric", "imperial"],
+      "default": "metric",
+      "required": true
+    },
+    {
+      "name": "focus",
+      "label": "What to focus on",
+      "type": "text",
+      "default": "what to wear and whether to expect rain",
+      "required": false
+    }
+  ],
+  "pipeline": [
+    {
+      "id": "fetch",
+      "kind": "tool",
+      "tool": "get_weather",
+      "reads": [],
+      "prompt": "Call the get_weather tool once, passing every one of these places in a single call exactly as written: {{input.locations}}. Use units {{input.units}}. Do not split them across several calls."
+    },
+    {
+      "id": "compare",
+      "kind": "reason",
+      "reads": ["step.fetch"],
+      "prompt": "List each place on its own line as: place -> conditions now -> today's range -> rain outlook. Copy the figures across exactly as given, including their units. Write 'NA' for anything missing, and do not add a place the material does not name."
+    }
+  ],
+  "answer": {
+    "prompt": "Write a short weather report of about 120 words covering every place above, with an eye on {{input.focus}}. Say which is warmest and which is coldest right now, and name any place expecting rain in the next three days. Keep the figures and their units exactly as given. If a place could not be found, say so in one sentence at the end.",
+    "reads": ["step.compare", "step.fetch"]
+  }
+}

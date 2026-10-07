@@ -3,15 +3,20 @@ import 'dart:convert';
 import 'package:checks/checks.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:model_scope_flutter/data/sources/agent_asset_source.dart';
+import 'package:model_scope_flutter/data/sources/firecrawl_api_client.dart';
+import 'package:model_scope_flutter/data/sources/open_meteo_api_client.dart';
+import 'package:model_scope_flutter/data/sources/tavily_api_client.dart';
 import 'package:model_scope_flutter/domain/services/agent_validator.dart';
+import 'package:model_scope_flutter/domain/services/firecrawl_web_crawler_service.dart';
+import 'package:model_scope_flutter/domain/services/open_meteo_weather_service.dart';
+import 'package:model_scope_flutter/domain/services/tavily_web_search_service.dart';
+import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
+import 'package:model_scope_flutter/domain/tools/document_tools.dart';
 import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
 
-import 'package:model_scope_flutter/domain/services/firecrawl_web_crawler_service.dart';
-import 'package:model_scope_flutter/data/sources/firecrawl_api_client.dart';
-import 'package:model_scope_flutter/data/sources/tavily_api_client.dart';
-import 'package:model_scope_flutter/domain/services/tavily_web_search_service.dart';
-import 'package:http/http.dart' as http;
+import '../support/fakes.dart';
 
 void main() {
   // The source decodes on `compute`, and the shipped-templates test reads real
@@ -103,7 +108,7 @@ void main() {
   test('the templates this build ships parse and validate', () async {
     // The one test that would catch a typo in a real template file.
     final templates = await AgentAssetSource().load();
-    final validator = AgentValidator(_realRegistry());
+    final validator = AgentValidator(_realRegistry(FakeDocumentIndex()));
 
     check(templates).isNotEmpty();
     for (final template in templates) {
@@ -136,7 +141,7 @@ void main() {
 /// The registry the app really builds, so the shipped templates are checked
 /// against the tools that will actually be there rather than a stand-in. The
 /// services never reach the network: nothing here runs a tool.
-ToolRegistry _realRegistry() {
+ToolRegistry _realRegistry(DocumentIndexRepository documents) {
   final client = http.Client();
   return ToolRegistry.standard(
     search: TavilyWebSearchService(TavilyApiClient(client), () async => ''),
@@ -144,6 +149,11 @@ ToolRegistry _realRegistry() {
       FirecrawlApiClient(client),
       () async => '',
     ),
+    weather: OpenMeteoWeatherService(OpenMeteoApiClient(client)),
+    documents: documents,
+    embedder: FakeEmbeddingService(),
+    retrieval: RetrievalSettings(),
+    hasEmbeddingModel: () async => true,
   );
 }
 

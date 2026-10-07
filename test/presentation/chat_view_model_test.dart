@@ -8,6 +8,7 @@ import 'package:model_scope_flutter/data/models/chat_session.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
 import 'package:model_scope_flutter/data/models/projector_descriptor.dart';
 import 'package:model_scope_flutter/data/models/sampler_settings.dart';
+import 'package:model_scope_flutter/data/models/usage_record.dart';
 import 'package:model_scope_flutter/domain/services/llm_service.dart';
 import 'package:model_scope_flutter/presentation/view_models/chat_state.dart';
 import 'package:model_scope_flutter/presentation/view_models/chat_view_model.dart';
@@ -22,6 +23,7 @@ void main() {
   late FakeSettingsRepository settings;
   late FakeModelLibraryRepository library;
   late FakeAppSettingsRepository runtime;
+  late FakeUsageRepository usage;
   late ProviderContainer container;
 
   /// Builds a container whose only session is [seed]. One model is installed by
@@ -45,6 +47,7 @@ void main() {
           : const <ProjectorDescriptor>[],
     );
     runtime = FakeAppSettingsRepository(appSettings ?? const AppSettings());
+    usage = FakeUsageRepository();
     return ProviderContainer.test(
       overrides: fakeOverrides(
         llm: llm,
@@ -53,6 +56,7 @@ void main() {
         library: library,
         appSettings: runtime,
         images: images,
+        usage: usage,
       ),
     );
   }
@@ -428,6 +432,36 @@ void main() {
     await notifierOf(container).send('Too early');
 
     check(llm.prompts).isEmpty();
+  });
+
+  test('a finished reply is recorded in the lifetime ledger', () async {
+    final seed = sessionWith();
+    container = containerWith(seed);
+    llm.tokens = <String>['Eight', '-bit', ' weights.'];
+    await notifierOf(container).open(seed.id);
+
+    await notifierOf(container).send('What does Q8_0 mean?');
+
+    // Written apart from the session, so deleting the chat cannot unmake it.
+    check(usage.recorded).length.equals(1);
+    final record = usage.recorded.single;
+    check(record.modelId).equals(fakeInstalledModel().id);
+    check(record.modelName).equals('SmolLM2 360M Instruct');
+    check(record.paramLabel).equals('360M');
+    check(record.tokenCount).equals(3);
+    check(record.kind).equals(UsageKind.chat);
+  });
+
+  test('a reply that failed is not recorded as throughput', () async {
+    final seed = sessionWith();
+    container = containerWith(seed);
+    llm.askFailure = (_) => StateError('the context is full');
+    await notifierOf(container).open(seed.id);
+
+    await notifierOf(container).send('Break');
+
+    // A failure has no tokens per second worth averaging into the figures.
+    check(usage.recorded).isEmpty();
   });
 
   test('a finished turn is written to disk', () async {

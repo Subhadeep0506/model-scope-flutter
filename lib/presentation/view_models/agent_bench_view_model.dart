@@ -26,7 +26,7 @@ class AgentBenchViewModel extends AsyncNotifier<AgentBenchState> {
       // the user opens it, rather than after they press Run.
       final availability = await validator.check(
         agent.template,
-        hasModel: library.models.isNotEmpty,
+        hasModel: library.chatModels.isNotEmpty,
         values: agent.template.defaultValues,
       );
       listings.add(

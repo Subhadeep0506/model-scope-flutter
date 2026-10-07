@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/di/providers.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/agent_template.dart';
@@ -115,8 +117,7 @@ class _Header extends StatelessWidget {
 }
 
 /// One labelled field. A choice is a dropdown, a number gets the numeric
-/// keyboard, and a file is a plain path box — nothing in this build consumes
-/// a file, so there is nothing to open a picker for yet.
+/// keyboard, and a file opens the platform picker.
 class _Field extends StatefulWidget {
   const _Field({
     required this.input,
@@ -172,6 +173,12 @@ class _FieldState extends State<_Field> {
             enabled: widget.enabled,
             onChanged: widget.onChanged,
           )
+        else if (input.type == AgentInputType.file)
+          _FilePick(
+            value: widget.value,
+            enabled: widget.enabled,
+            onChanged: widget.onChanged,
+          )
         else
           TextField(
             controller: _controller,
@@ -194,6 +201,68 @@ class _FieldState extends State<_Field> {
           ),
       ],
     );
+  }
+}
+
+/// The name of the picked file and a button to change it.
+///
+/// Read-only: the path is the platform's, and a user typing one by hand on a
+/// phone would be typing somewhere the app almost certainly cannot read.
+class _FilePick extends ConsumerWidget {
+  const _FilePick({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final metrics = context.metrics;
+    final palette = context.palette;
+    final name = value.isEmpty ? null : value.split(RegExp(r'[/\\]')).last;
+
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Container(
+            height: 44,
+            padding: EdgeInsets.symmetric(horizontal: metrics.gapMd),
+            decoration: BoxDecoration(
+              color: palette.fieldFill,
+              borderRadius: metrics.controlShape,
+            ),
+            alignment: Alignment.centerLeft,
+            child: Text(
+              name ?? 'No file chosen',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: name == null ? palette.muted : null),
+            ),
+          ),
+        ),
+        SizedBox(width: metrics.gapSm),
+        OutlinedButton(
+          onPressed: enabled ? () => _pick(ref) : null,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 44),
+            padding: EdgeInsets.symmetric(horizontal: metrics.gapMd),
+          ),
+          child: Text(name == null ? 'Choose' : 'Change'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pick(WidgetRef ref) async {
+    final path = await ref.read(documentPickerProvider).pick();
+    // Null is a cancel, which must leave the previous choice alone rather
+    // than clearing it.
+    if (path != null) onChanged(path);
   }
 }
 

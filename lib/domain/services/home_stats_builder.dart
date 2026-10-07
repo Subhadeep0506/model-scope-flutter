@@ -1,10 +1,9 @@
 import '../../data/models/agent_run.dart';
 import '../../data/models/byte_size.dart';
-import '../../data/models/chat_message.dart';
 import '../../data/models/chat_session.dart';
-import '../../data/models/generation_metrics.dart';
 import '../../data/models/home_stats.dart';
 import '../../data/models/model_descriptor.dart';
+import '../../data/models/usage_record.dart';
 import '../../data/repositories/model_library_repository.dart';
 
 const int _activityLimit = 8;
@@ -12,89 +11,63 @@ const int _activityLimit = 8;
 /// How many days the latency trend covers.
 const int _trendDays = 7;
 
+/// Home's figures.
+///
+/// Where each comes from matters, and the split is deliberate. Everything
+/// about performance — tokens, latency, throughput, which model did what —
+/// is folded out of [usage], the permanent ledger, so deleting a chat cannot
+/// lower a figure for work that really happened. Everything about what
+/// currently exists — how many sessions there are, what is in the activity
+/// feed — still comes from [sessions] and [library], because a count of
+/// things on the device has to be honest about the device.
 HomeStats buildHomeStats({
   required List<ChatSession> sessions,
   required ModelLibrary library,
   required DateTime now,
+  UsageLedger usage = UsageLedger.empty,
   List<AgentRun> runs = const <AgentRun>[],
   int agentCount = 0,
 }) {
-  final replies = _repliesOf(sessions);
-  if (replies.isEmpty && library.isEmpty && sessions.isEmpty && runs.isEmpty) {
+  // `runs` is in the guard as well as `usage` because the two are written
+  // separately: a run recorded before the ledger existed is still activity
+  // worth drawing, and folding to empty would hide the whole feed.
+  if (usage.isEmpty && library.isEmpty && sessions.isEmpty && runs.isEmpty) {
     return HomeStats.empty;
   }
 
-  final peak = _peakOf(replies);
+  final totals = usage.totals;
   return HomeStats(
-    totalTokens: replies.fold(0, (sum, r) => sum + r.metrics.tokenCount),
-    averageLatencyMs: _meanLatency(replies),
-    peakTokensPerSecond: peak?.metrics.tokensPerSecond ?? 0,
-    peakModelName: _nameOf(library, peak?.modelId),
+    totalTokens: totals.tokens,
+    averageLatencyMs: totals.averageLatencyMs,
+    peakTokensPerSecond: totals.peakTokensPerSecond,
+    peakModelName: totals.peakModelName,
     modelCount: library.models.length,
     modelBytes: library.totalBytes,
-    repliesToday: _countToday(replies, now),
+    repliesToday: _countToday(usage.recent, now),
     sessionCount: sessions.length,
-    latencyTrend: _trend(replies, now),
-    throughputBySize: _throughputBySize(replies, library),
-    modelUsage: _usage(sessions, library),
+    latencyTrend: _trend(usage.recent, now),
+    throughputBySize: _throughputBySize(usage),
+    modelUsage: _usage(usage, library),
     activity: _activity(sessions, library, runs),
-    agentRuns: runs.length,
+    agentRuns: totals.agentRuns,
     agentCount: agentCount,
   );
 }
 
-/// One finished reply, flattened out of the session it belongs to so the folds
-/// below never have to walk the nesting again.
-class _Reply {
-  const _Reply({
-    required this.at,
-    required this.metrics,
-    required this.modelId,
-  });
-
-  final DateTime at;
-  final GenerationMetrics metrics;
-  final String modelId;
-}
-
-List<_Reply> _repliesOf(List<ChatSession> sessions) => <_Reply>[
-  for (final session in sessions)
-    for (final message in session.messages)
-      if (message.role == MessageRole.assistant)
-        if (message.metrics case final metrics?)
-          _Reply(
-            at: message.createdAt,
-            metrics: metrics,
-            modelId: session.modelId,
-          ),
-];
-
-_Reply? _peakOf(List<_Reply> replies) {
-  _Reply? best;
-  for (final reply in replies) {
-    final current = best;
-    if (current == null ||
-        reply.metrics.tokensPerSecond > current.metrics.tokensPerSecond) {
-      best = reply;
-    }
-  }
-  return best;
-}
-
-int _meanLatency(List<_Reply> replies) {
+int _meanLatency(List<UsageRecord> replies) {
   if (replies.isEmpty) return 0;
-  final total = replies.fold<int>(0, (sum, r) => sum + r.metrics.latencyMs);
+  final total = replies.fold<int>(0, (sum, r) => sum + r.latencyMs);
   return (total / replies.length).round();
 }
 
-int _countToday(List<_Reply> replies, DateTime now) {
+int _countToday(List<UsageRecord> replies, DateTime now) {
   final midnight = DateTime(now.year, now.month, now.day);
   return replies.where((r) => !r.at.isBefore(midnight)).length;
 }
 
 /// Seven buckets ending today. A day nothing was generated on carries a null
 /// average, which the chart draws as a gap rather than as a drop to zero.
-List<DailyLatency> _trend(List<_Reply> replies, DateTime now) {
+List<DailyLatency> _trend(List<UsageRecord> replies, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
   return <DailyLatency>[
     for (var back = _trendDays - 1; back >= 0; back--)
@@ -102,7 +75,7 @@ List<DailyLatency> _trend(List<_Reply> replies, DateTime now) {
   ];
 }
 
-DailyLatency _bucket(List<_Reply> replies, DateTime day) {
+DailyLatency _bucket(List<UsageRecord> replies, DateTime day) {
   final next = day.add(const Duration(days: 1));
   final onDay = replies
       .where((r) => !r.at.isBefore(day) && r.at.isBefore(next))
@@ -115,25 +88,25 @@ DailyLatency _bucket(List<_Reply> replies, DateTime day) {
 
 /// Mean throughput per parameter size, smallest first. Models with no stated
 /// parameter count are left out; an unlabelled bar on a size axis says nothing.
-List<SizeThroughput> _throughputBySize(
-  List<_Reply> replies,
-  ModelLibrary library,
-) {
-  final totals = <String, List<double>>{};
-  for (final reply in replies) {
-    final label = library.byId(reply.modelId)?.paramLabel;
-    if (label == null) continue;
-    totals
-        .putIfAbsent(label, () => <double>[])
-        .add(reply.metrics.tokensPerSecond);
+///
+/// Reads the size off the ledger rather than the library, so a bar survives
+/// the model that earned it being deleted — which is the point of recording
+/// the label on every row in the first place.
+List<SizeThroughput> _throughputBySize(UsageLedger usage) {
+  final sums = <String, double>{};
+  final counts = <String, int>{};
+  for (final model in usage.byModel.values) {
+    final label = model.paramLabel;
+    if (label == null || model.replies == 0) continue;
+    sums[label] = (sums[label] ?? 0) + model.tokensPerSecondSum;
+    counts[label] = (counts[label] ?? 0) + model.replies;
   }
 
   final bars = <SizeThroughput>[
-    for (final entry in totals.entries)
+    for (final entry in sums.entries)
       SizeThroughput(
         paramLabel: entry.key,
-        tokensPerSecond:
-            entry.value.reduce((a, b) => a + b) / entry.value.length,
+        tokensPerSecond: entry.value / (counts[entry.key] ?? 1),
       ),
   ];
   return bars
@@ -153,16 +126,31 @@ double _params(String label) {
   return unit == 'B' ? value * 1000000000 : value * 1000000;
 }
 
-/// Installed models, the ones that have answered something first.
-List<ModelUsage> _usage(List<ChatSession> sessions, ModelLibrary library) {
-  final used = <String, List<_Reply>>{};
-  for (final reply in _repliesOf(sessions)) {
-    used.putIfAbsent(reply.modelId, () => <_Reply>[]).add(reply);
-  }
-
+/// Every model that has answered something, plus the installed ones that have
+/// not yet — which is what tells the user a download is sitting unused.
+///
+/// A model that has been deleted keeps its row: the replies it produced are
+/// still part of what this device has done, and dropping the row was the old
+/// behaviour that made the list shrink under the user.
+List<ModelUsage> _usage(UsageLedger usage, ModelLibrary library) {
   final rows = <ModelUsage>[
+    for (final model in usage.byModel.values)
+      if (model.replies > 0)
+        ModelUsage(
+          modelId: model.modelId,
+          // The library's name wins while the model is installed, so a
+          // rename in the catalog shows up; the recorded one takes over
+          // once the weights are gone.
+          name: library.byId(model.modelId)?.name ?? _named(model),
+          quantization:
+              library.byId(model.modelId)?.quantization ?? model.quantization,
+          runs: model.replies,
+          averageLatencyMs: model.averageLatencyMs,
+          lastUsedAt: model.lastUsedAt,
+          isInstalled: library.byId(model.modelId) != null,
+        ),
     for (final model in library.models)
-      _usageOf(model, used[model.id] ?? const <_Reply>[]),
+      if ((usage.byModel[model.id]?.replies ?? 0) == 0) _unused(model),
   ];
   rows.sort((a, b) {
     if (a.runs != b.runs) return b.runs.compareTo(a.runs);
@@ -171,20 +159,19 @@ List<ModelUsage> _usage(List<ChatSession> sessions, ModelLibrary library) {
   return rows;
 }
 
-ModelUsage _usageOf(ModelDescriptor model, List<_Reply> replies) {
-  DateTime? last;
-  for (final reply in replies) {
-    if (last == null || reply.at.isAfter(last)) last = reply.at;
-  }
-  return ModelUsage(
-    modelId: model.id,
-    name: model.name,
-    quantization: model.quantization,
-    runs: replies.length,
-    averageLatencyMs: _meanLatency(replies),
-    lastUsedAt: last,
-  );
-}
+/// What to call a model whose weights have gone. The recorded name when there
+/// is one, and the file it came from when there is not.
+String _named(ModelTotals model) =>
+    model.name.isNotEmpty ? model.name : model.modelId.split('/').last;
+
+ModelUsage _unused(ModelDescriptor model) => ModelUsage(
+  modelId: model.id,
+  name: model.name,
+  quantization: model.quantization,
+  runs: 0,
+  averageLatencyMs: 0,
+  lastUsedAt: null,
+);
 
 /// Sessions, downloads and agent runs merged, newest first.
 List<ActivityEntry> _activity(
@@ -238,8 +225,3 @@ String _slugOf(String modelId, ModelLibrary library) {
       .replaceAll(RegExp(r'-GGUF$', caseSensitive: false), '')
       .toLowerCase();
 }
-
-/// The model a reply came from, as named in the library. Null once that model
-/// has been removed, which the peak tile renders as no caption at all.
-String? _nameOf(ModelLibrary library, String? modelId) =>
-    modelId == null ? null : library.byId(modelId)?.name;

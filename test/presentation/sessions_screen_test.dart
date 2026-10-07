@@ -1,6 +1,10 @@
 import 'package:checks/checks.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:model_scope_flutter/config/router/app_router.dart';
+import 'package:model_scope_flutter/config/theme/app_theme.dart';
 import 'package:model_scope_flutter/data/models/chat_session.dart';
 import 'package:model_scope_flutter/presentation/screens/sessions_screen.dart';
 import 'package:model_scope_flutter/presentation/widgets/session_card.dart';
@@ -68,6 +72,47 @@ void main() {
 
     check(find.text('No sessions match those filters.').evaluate())
         .isNotEmpty();
+    // A filter hiding the only chat is not the same as having no chats, so
+    // the empty state must not offer to start one here.
+    check(find.text('Start a chat').evaluate()).isEmpty();
+  });
+
+  testWidgets('a fresh install offers a way to start the first chat', (
+    tester,
+  ) async {
+    // A router with a stand-in at the session path, so this asserts that the
+    // button creates a chat and opens it rather than what the chat renders.
+    final repository = FakeSessionRepository();
+    final router = GoRouter(
+      initialLocation: Routes.chat,
+      routes: <RouteBase>[
+        GoRoute(path: Routes.chat, builder: (_, _) => const SessionsScreen()),
+        GoRoute(
+          path: Routes.session,
+          builder: (_, _) => const Scaffold(body: Text('The chat')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: fakeOverrides(llm: FakeLlmService(), sessions: repository),
+        child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    check(find.text('No chats yet').evaluate()).isNotEmpty();
+    check(find.text('No sessions match those filters.').evaluate()).isEmpty();
+    // Nothing is seeded any more, so the store stays untouched until asked.
+    check(repository.stored).isEmpty();
+
+    await tester.tap(find.text('Start a chat'));
+    await tester.pumpAndSettle();
+
+    check(repository.stored).length.equals(1);
+    check(find.text('The chat').evaluate()).isNotEmpty();
   });
 
   testWidgets('delete asks first and cancelling keeps the session', (

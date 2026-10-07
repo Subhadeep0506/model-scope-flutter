@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:checks/checks.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:model_scope_flutter/config/di/providers.dart';
 import 'package:model_scope_flutter/config/di/view_models.dart';
 import 'package:model_scope_flutter/data/models/agent_run.dart';
 import 'package:model_scope_flutter/data/models/agent_template.dart';
@@ -8,6 +11,7 @@ import 'package:model_scope_flutter/data/models/app_settings.dart';
 import 'package:model_scope_flutter/data/models/catalog_model.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
 import 'package:model_scope_flutter/data/models/sampler_settings.dart';
+import 'package:model_scope_flutter/data/models/usage_record.dart';
 import 'package:model_scope_flutter/data/repositories/agent_repository.dart';
 import 'package:model_scope_flutter/presentation/view_models/agent_run_state.dart';
 import 'package:model_scope_flutter/presentation/view_models/agent_run_view_model.dart';
@@ -19,6 +23,9 @@ void main() {
 
   late FakeLlmService llm;
   late FakeAgentRunRepository history;
+  late FakeUsageRepository usage;
+  late FakeDocumentIndex documents;
+  late FakeEmbeddingService embedder;
 
   ProviderContainer containerWith({
     List<ModelDescriptor>? models,
@@ -28,9 +35,20 @@ void main() {
     AgentTemplate? template,
     FakeCatalogRepository? catalog,
     List<String> needingKeys = const <String>[],
+    List<String> toolNames = const <String>[
+      'web_search',
+      'read_web_page',
+      'calculator',
+      'date_math',
+      'unit_convert',
+      'search_document',
+    ],
   }) {
     llm = FakeLlmService();
     history = FakeAgentRunRepository(runs);
+    usage = FakeUsageRepository();
+    documents = FakeDocumentIndex();
+    embedder = FakeEmbeddingService();
     return ProviderContainer.test(
       overrides: fakeOverrides(
         llm: llm,
@@ -46,7 +64,10 @@ void main() {
           Agent(template: template ?? fakeAgentTemplate(), isBuiltIn: true),
         ]),
         agentRuns: history,
-        tools: fakeToolRegistry(needingKeys: needingKeys),
+        usage: usage,
+        documents: documents,
+        embedder: embedder,
+        tools: fakeToolRegistry(names: toolNames, needingKeys: needingKeys),
         // The shared default is text-only and shares a repository id with the
         // default installed model, which would warn in every test here.
         catalog: catalog ?? toolCapableCatalog(),
@@ -294,6 +315,49 @@ void main() {
       check(llm.applied.single.maxTokens).equals(512);
     });
 
+    test('a template may raise the temperature above the default', () async {
+      final container = containerWith(
+        template: fakeAgentTemplate(temperature: 0.45),
+        sampler: const SamplerSettings(temperature: 1.8),
+      );
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // An agent writing prose from retrieved material wants more than the
+      // tool-calling default, and says so in its own file.
+      check(llm.applied.single.temperature).equals(0.45);
+    });
+
+    test('a temperature input overrides the template', () async {
+      final container = containerWith(
+        template: fakeAgentTemplate(temperature: 0.45),
+      );
+      await notifierOf(container).open('test_agent');
+      notifierOf(container).setValue('temperature', '1.1');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // So the same agent can be tried at several settings without editing
+      // the file it ships in.
+      check(llm.applied.single.temperature).equals(1.1);
+    });
+
+    test('an unreadable temperature falls back rather than failing', () async {
+      final container = containerWith(
+        template: fakeAgentTemplate(temperature: 0.45),
+      );
+      await notifierOf(container).open('test_agent');
+      notifierOf(container).setValue('temperature', 'hot');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(llm.applied.single.temperature).equals(0.45);
+    });
+
     test('runs on the model picked here, not the active one', () async {
       final container = containerWith(
         models: <ModelDescriptor>[
@@ -348,6 +412,160 @@ void main() {
       check(history.stored).length.equals(1);
       check(history.stored.single.agentId).equals('test_agent');
       check(stateOf(container).history.first.agentId).equals('test_agent');
+    });
+
+    test('choosing a file unblocks an agent that required one', () async {
+      // The file input has no default and cannot have one, so the agent
+      // opens blocked. Without rechecking on every change the run button
+      // would stay disabled whatever the user picked.
+      final file = await _writeDocument('report.txt', 'Revenue rose 8%.');
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+
+      check(stateOf(container).status).equals(AgentRunStatus.blocked);
+      check(stateOf(container).error).isNotNull().contains('Document');
+
+      await notifierOf(container).setValue('document', file);
+
+      check(stateOf(container).status).equals(AgentRunStatus.idle);
+      check(stateOf(container).error).isNull();
+    });
+
+    test('clearing a required input blocks the agent again', () async {
+      final file = await _writeDocument('report.txt', 'Revenue rose 8%.');
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+      await notifierOf(container).setValue('document', file);
+
+      await notifierOf(container).setValue('question', '  ');
+
+      check(stateOf(container).status).equals(AgentRunStatus.blocked);
+    });
+
+    test('a document agent indexes before it loads any weights', () async {
+      final file = await _writeDocument('report.txt', 'Revenue rose 8%.');
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+      notifierOf(container).setValue('document', file);
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(documents.chunks).isNotEmpty();
+      check(documents.stored.single.title).equals('report.txt');
+      // The encoder is loaded and released before the chat model is loaded:
+      // two models resident at once is how an allocation fails on a phone.
+      check(embedder.disposeCalls).equals(1);
+      check(llm.loadCalls).equals(1);
+      check(stateOf(container).logs.any((e) => e.channel == 'index')).isTrue();
+    });
+
+    test('the run tells the tool how many passages to fetch', () async {
+      final file = await _writeDocument('report.txt', 'Revenue rose 8%.');
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+      notifierOf(container).setValue('document', file);
+      notifierOf(container).setValue('top_k', '7');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // The tool was built long before this run, so the run has to say.
+      final settings = container.read(retrievalSettingsProvider);
+      check(settings.topK).equals(7);
+      check(settings.embeddingModel?.name).equals('BGE Small EN v1.5');
+    });
+
+    test('with no file chosen it says so before loading anything', () async {
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(stateOf(container).error).isNotNull().contains('needs a file');
+      check(llm.loadCalls).equals(0);
+    });
+
+    test('with no embedding model installed it names the fix', () async {
+      final file = await _writeDocument('report.txt', 'Revenue rose 8%.');
+      final container = containerWith(template: fakeDocumentAgent());
+      await notifierOf(container).open('document_qna');
+      notifierOf(container).setValue('document', file);
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(stateOf(container).error)
+          .isNotNull()
+          .contains('No embedding model');
+      check(llm.loadCalls).equals(0);
+    });
+
+    test('a document that cannot be read ends the run, not the app', () async {
+      final container = containerWith(
+        template: fakeDocumentAgent(),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+      notifierOf(container).setValue('document', '/nowhere/missing.txt');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(stateOf(container).status).equals(AgentRunStatus.finished);
+      check(stateOf(container).error).isNotNull().contains('no longer');
+      // Indexing nothing must not leave the agent retrieving from an empty
+      // index and answering confidently out of it.
+      check(llm.loadCalls).equals(0);
+      check(documents.chunks).isEmpty();
+    });
+
+    test('an agent with no file input indexes nothing', () async {
+      final container = containerWith();
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      check(embedder.loadCalls).equals(0);
+      check(documents.chunks).isEmpty();
+    });
+
+    test('counts the run in the lifetime ledger', () async {
+      final container = containerWith();
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // Counted here rather than from the run history file, which is capped
+      // at fifty — otherwise the AGENT RUNS tile would quietly plateau.
+      check(usage.recorded).length.equals(1);
+      final record = usage.recorded.single;
+      check(record.kind).equals(UsageKind.agentRun);
+      check(record.agentId).equals('test_agent');
+      check(record.modelId).equals(fakeInstalledModel().id);
+      // A run's throughput is spread over several steps, so no reply figures
+      // are claimed for it.
+      check(record.tokenCount).equals(0);
+      check(usage.stored.totals.agentRuns).equals(1);
+      check(usage.stored.totals.replies).equals(1);
     });
 
     test('releases the model when the run ends', () async {
@@ -496,4 +714,17 @@ void main() {
           .deepEquals(<String, String>{'query': 'dart records'});
     });
   });
+}
+
+/// Writes [content] to a temporary file and returns its path, cleaned up when
+/// the test ends.
+Future<String> _writeDocument(String name, String content) async {
+  final directory = await Directory.systemTemp.createTemp('agent_doc_test');
+  addTearDown(() async {
+    if (await directory.exists()) await directory.delete(recursive: true);
+  });
+
+  final file = File('${directory.path}${Platform.pathSeparator}$name');
+  await file.writeAsString(content);
+  return file.path;
 }

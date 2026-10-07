@@ -19,6 +19,7 @@ class ModelDescriptor {
     required this.localPath,
     required this.installedAt,
     this.paramLabel,
+    this.isEmbedding = false,
   });
 
   factory ModelDescriptor.fromJson(Map<String, dynamic> json) =>
@@ -40,6 +41,7 @@ class ModelDescriptor {
     localPath: localPath,
     installedAt: at ?? DateTime.now(),
     paramLabel: model.paramLabel,
+    isEmbedding: model.isEmbedding,
   );
 
   /// `bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF`, shown in mono under the
@@ -66,6 +68,13 @@ class ModelDescriptor {
 
   /// `1.5B`. Null when the repository name does not state one.
   final String? paramLabel;
+
+  /// Whether this encodes text rather than answering it.
+  ///
+  /// Defaults to false, which is right for every record written before
+  /// embedding models existed: everything installed then was a chat model.
+  @JsonKey(defaultValue: false)
+  final bool isEmbedding;
 
   /// Unique and stable: the same file from the same repo is the same model.
   String get id => '$repoId/$fileName';

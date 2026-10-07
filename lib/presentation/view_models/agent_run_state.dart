@@ -8,6 +8,12 @@ enum AgentRunStatus {
   loading,
   idle,
   blocked,
+
+  /// Reading and encoding the picked document, before any weights are loaded.
+  /// Its own status because it can take tens of seconds on a long PDF, and
+  /// `Loading the model` would be a lie about what the wait is for.
+  indexing,
+
   preparing,
   running,
   finished,
@@ -82,12 +88,15 @@ class AgentRunState {
   /// Whether the screen is showing a run rather than the configuration.
   bool get showsRun =>
       viewing != null ||
+      status == AgentRunStatus.indexing ||
       status == AgentRunStatus.preparing ||
       status == AgentRunStatus.running ||
       status == AgentRunStatus.finished;
 
   bool get isRunning =>
-      status == AgentRunStatus.preparing || status == AgentRunStatus.running;
+      status == AgentRunStatus.indexing ||
+      status == AgentRunStatus.preparing ||
+      status == AgentRunStatus.running;
 
   bool get canRun =>
       agent != null && !isRunning && status != AgentRunStatus.loading;

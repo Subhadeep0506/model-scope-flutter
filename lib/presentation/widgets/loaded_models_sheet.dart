@@ -26,7 +26,7 @@ class LoadedModelsSheet extends ConsumerWidget {
     final metrics = context.metrics;
     final library = ref.watch(modelLibraryViewModelProvider).value;
     final lastRun = ref.watch(chatViewModelProvider).lastMetrics;
-    final models = library?.models ?? const <ModelDescriptor>[];
+    final models = library?.chatModels ?? const <ModelDescriptor>[];
 
     return SheetScaffold(
       title: 'Installed models',

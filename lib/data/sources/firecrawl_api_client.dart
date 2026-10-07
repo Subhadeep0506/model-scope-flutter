@@ -18,6 +18,16 @@ class FirecrawlApiException implements Exception {
   String toString() => message;
 }
 
+/// What `/team/credit-usage` says about a key. [planCredits] is the plan's own
+/// allowance and excludes coupons and pay-as-you-go, so only [remaining] is
+/// worth putting in front of the user as a figure.
+class FirecrawlCredits {
+  const FirecrawlCredits({required this.remaining, this.planCredits});
+
+  final int remaining;
+  final int? planCredits;
+}
+
 /// Thin client over the Firecrawl v2 API: one page at a time, or a batch job.
 class FirecrawlApiClient {
   const FirecrawlApiClient(this._client);
@@ -25,6 +35,33 @@ class FirecrawlApiClient {
   final http.Client _client;
 
   static const String _host = 'api.firecrawl.dev';
+
+  /// Checks a key without spending any of it.
+  ///
+  /// A billing query rather than a scrape, so it costs no credits — which is
+  /// why Verify points here and not at `/v2/scrape`.
+  Future<FirecrawlCredits> creditUsage({required String apiKey}) async {
+    final response = await _get(
+      Uri.https(_host, '/v2/team/credit-usage'),
+      apiKey,
+    );
+    final data = _dataOf(
+      _decodeObject(response.body),
+      what: 'this key\'s credits',
+    );
+
+    final remaining = data['remainingCredits'];
+    if (remaining is! num) {
+      throw const FirecrawlApiException(
+        'Firecrawl did not say how many credits this key has left.',
+      );
+    }
+    final plan = data['planCredits'];
+    return FirecrawlCredits(
+      remaining: remaining.toInt(),
+      planCredits: plan is num ? plan.toInt() : null,
+    );
+  }
 
   Future<ScrapedPage> scrape({
     required String apiKey,
@@ -191,18 +228,21 @@ class FirecrawlApiClient {
     return decoded;
   }
 
-  static Map<String, dynamic> _dataOf(Map<String, dynamic> body) {
+  /// The `data` object out of a `{success, data}` envelope. [what] names what
+  /// was being asked for, so a failure reads as a sentence about that rather
+  /// than about a page the caller never mentioned.
+  static Map<String, dynamic> _dataOf(
+    Map<String, dynamic> body, {
+    String what = 'that page',
+  }) {
     if (body['success'] == false) {
       throw FirecrawlApiException(
-        'Firecrawl could not read the page: '
-        '${_errorOf(jsonEncode(body))}',
+        'Firecrawl could not read $what: ${_errorOf(jsonEncode(body))}',
       );
     }
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
-      throw const FirecrawlApiException(
-        'Firecrawl returned no content for that page.',
-      );
+      throw FirecrawlApiException('Firecrawl returned nothing for $what.');
     }
     return data;
   }

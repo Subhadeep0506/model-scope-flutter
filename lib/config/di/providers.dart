@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:objectbox/objectbox.dart';
 
 import '../../data/models/api_keys.dart';
 import '../../data/models/model_descriptor.dart';
@@ -12,29 +13,39 @@ import '../../data/repositories/agent_run_repository.dart';
 import '../../data/repositories/api_key_repository.dart';
 import '../../data/repositories/app_settings_repository.dart';
 import '../../data/repositories/catalog_repository.dart';
+import '../../data/repositories/document_index_repository.dart';
 import '../../data/repositories/hugging_face_repository.dart';
 import '../../data/repositories/local_session_repository.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../../data/repositories/session_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/usage_repository.dart';
 import '../../data/sources/agent_asset_source.dart';
 import '../../data/sources/agent_file_store.dart';
 import '../../data/sources/firecrawl_api_client.dart';
 import '../../data/sources/hf_api_client.dart';
 import '../../data/sources/json_file_store.dart';
+import '../../data/sources/open_meteo_api_client.dart';
 import '../../data/sources/secure_key_store.dart';
 import '../../data/sources/tavily_api_client.dart';
 import '../../domain/services/agent_runner.dart';
 import '../../domain/services/agent_validator.dart';
+import '../../domain/services/api_key_verifier.dart';
 import '../../domain/services/app_cache_service.dart';
 import '../../domain/services/attachment_picker.dart';
+import '../../domain/services/document_extractor.dart';
+import '../../domain/services/document_ingestor.dart';
+import '../../domain/services/document_picker.dart';
+import '../../domain/services/embedding_service.dart';
 import '../../domain/services/firecrawl_web_crawler_service.dart';
 import '../../domain/services/image_store.dart';
 import '../../domain/services/llm_service.dart';
 import '../../domain/services/model_downloader.dart';
 import '../../domain/services/nobodywho_llm_service.dart';
+import '../../domain/services/open_meteo_weather_service.dart';
 import '../../domain/services/tavily_web_search_service.dart';
 import '../../domain/tools/tool_definition.dart';
+import '../../domain/tools/document_tools.dart';
 import '../../domain/tools/tool_registry.dart';
 import '../../domain/tools/web_tools.dart';
 import '../router/app_router.dart';
@@ -48,6 +59,19 @@ final documentsDirectoryProvider = Provider<Directory>(
 
 final sharedPreferencesProvider = Provider<SharedPreferencesAsync>(
   (ref) => SharedPreferencesAsync(),
+);
+
+/// The open vector database. Opened in `main()` because the native store takes
+/// a file lock for the life of the process, so it cannot be built lazily per
+/// scope the way the JSON stores are.
+final objectBoxStoreProvider = Provider<Store>(
+  (ref) => throw UnimplementedError(
+    'objectBoxStoreProvider must be overridden in ProviderScope.',
+  ),
+);
+
+final documentIndexRepositoryProvider = Provider<DocumentIndexRepository>(
+  (ref) => DocumentIndexRepository(ref.watch(objectBoxStoreProvider)),
 );
 
 final sessionStoreProvider = Provider<JsonFileStore>(
@@ -149,12 +173,64 @@ final webToolsProvider = Provider<List<ToolDefinition>>(
   ),
 );
 
+final openMeteoApiClientProvider = Provider<OpenMeteoApiClient>(
+  (ref) => OpenMeteoApiClient(ref.watch(httpClientProvider)),
+);
+
+/// The weather. No key reader, unlike the two above: Open-Meteo is open, so
+/// there is nothing to store in Settings and nothing to spend.
+final weatherServiceProvider = Provider<OpenMeteoWeatherService>(
+  (ref) => OpenMeteoWeatherService(ref.watch(openMeteoApiClientProvider)),
+);
+
+/// Turns text into vectors for the document index. Disposed with the scope so
+/// a leftover encoder does not keep its weights resident.
+final embeddingServiceProvider = Provider<EmbeddingService>((ref) {
+  final service = NobodyWhoEmbeddingService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+/// What the current agent run wants from retrieval.
+///
+/// One mutable object rather than per-call state: the tool is built once in
+/// the registry and knows nothing of the run calling it, so the run writes
+/// here before it starts. See [RetrievalSettings].
+final retrievalSettingsProvider = Provider<RetrievalSettings>(
+  (ref) => RetrievalSettings(),
+);
+
+final documentExtractorProvider = Provider<DocumentExtractor>(
+  (ref) => const DocumentExtractor(),
+);
+
+final documentPickerProvider = Provider<DocumentPicker>(
+  (ref) => const DocumentPicker(),
+);
+
+final documentIngestorProvider = Provider<DocumentIngestor>(
+  (ref) => DocumentIngestor(
+    ref.watch(documentExtractorProvider),
+    ref.watch(embeddingServiceProvider),
+    ref.watch(documentIndexRepositoryProvider),
+  ),
+);
+
 /// Every tool a template may name, and whether each can run right now. The
 /// `TOOLS n registered` tile on the Agent bench counts this.
 final toolRegistryProvider = Provider<ToolRegistry>(
   (ref) => ToolRegistry.standard(
     search: ref.watch(webSearchServiceProvider),
     crawler: ref.watch(webCrawlerServiceProvider),
+    weather: ref.watch(weatherServiceProvider),
+    documents: ref.watch(documentIndexRepositoryProvider),
+    embedder: ref.watch(embeddingServiceProvider),
+    retrieval: ref.watch(retrievalSettingsProvider),
+    // Read per call rather than captured, so downloading an embedding model
+    // unblocks the agent without rebuilding the registry.
+    hasEmbeddingModel: () async =>
+        (await ref.read(modelLibraryViewModelProvider.future)).embeddingModel !=
+        null,
   ),
 );
 
@@ -186,6 +262,19 @@ final agentRunRepositoryProvider = Provider<AgentRunRepository>(
   (ref) => AgentRunRepository(ref.watch(agentRunStoreProvider)),
 );
 
+final usageStoreProvider = Provider<JsonFileStore>(
+  (ref) => JsonFileStore(
+    directory: ref.watch(documentsDirectoryProvider),
+    fileName: 'usage.json',
+  ),
+);
+
+/// Where Home's lifetime figures live. Deliberately not the session store:
+/// see [UsageRepository].
+final usageRepositoryProvider = Provider<UsageRepository>(
+  (ref) => UsageRepository(ref.watch(usageStoreProvider)),
+);
+
 final agentValidatorProvider = Provider<AgentValidator>(
   (ref) => AgentValidator(ref.watch(toolRegistryProvider)),
 );
@@ -211,6 +300,16 @@ final huggingFaceRepositoryProvider = Provider<HuggingFaceRepository>(
   (ref) => HuggingFaceRepository(
     ref.watch(hfApiClientProvider),
     () => ref.read(apiKeyRepositoryProvider).read(ApiKeyKind.huggingFace),
+  ),
+);
+
+/// What the Verify button on each API key card calls. Every check it makes is
+/// free — see [ApiKeyVerifier].
+final apiKeyVerifierProvider = Provider<ApiKeyVerifier>(
+  (ref) => ApiKeyVerifier(
+    ref.watch(huggingFaceRepositoryProvider),
+    ref.watch(tavilyApiClientProvider),
+    ref.watch(firecrawlApiClientProvider),
   ),
 );
 

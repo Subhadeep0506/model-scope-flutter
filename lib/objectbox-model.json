@@ -1,0 +1,102 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:8908478035516613134",
+      "lastPropertyId": "5:5265777330473282763",
+      "name": "DocumentChunk",
+      "properties": [
+        {
+          "id": "1:8283539601921984041",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6132400790006226054",
+          "name": "docId",
+          "indexId": "1:3394855078667721877",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:6812826053694757501",
+          "name": "ordinal",
+          "type": 6
+        },
+        {
+          "id": "4:5314880424897439057",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:5265777330473282763",
+          "name": "embedding",
+          "indexId": "2:4501562972594563632",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:5823116824665715704",
+      "lastPropertyId": "7:6417658989410312728",
+      "name": "IngestedDocument",
+      "properties": [
+        {
+          "id": "1:6099967303366965383",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3476911894186666596",
+          "name": "docId",
+          "indexId": "3:879101891715931992",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:5692092058519536944",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "4:1326660741503113298",
+          "name": "sourcePath",
+          "type": 9
+        },
+        {
+          "id": "5:8912786406901752399",
+          "name": "chunkCount",
+          "type": 6
+        },
+        {
+          "id": "6:4718477778077471909",
+          "name": "embedModelId",
+          "type": 9
+        },
+        {
+          "id": "7:6417658989410312728",
+          "name": "ingestedAt",
+          "type": 10
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "2:5823116824665715704",
+  "lastIndexId": "3:879101891715931992",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

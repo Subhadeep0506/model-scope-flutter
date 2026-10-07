@@ -152,7 +152,9 @@ class _StatGrid extends StatelessWidget {
     StatTile(
       label: 'TOKENS GENERATED',
       value: formatCount(stats.totalTokens),
-      caption: 'across stored sessions',
+      // Lifetime, not "across stored sessions": the figures come from the
+      // usage ledger now, so deleting a chat no longer lowers them.
+      caption: 'on this device, all time',
       accent: true,
     ),
     StatTile(

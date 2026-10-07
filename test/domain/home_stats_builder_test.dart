@@ -6,6 +6,7 @@ import 'package:model_scope_flutter/data/models/chat_session.dart';
 import 'package:model_scope_flutter/data/models/generation_metrics.dart';
 import 'package:model_scope_flutter/data/models/home_stats.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
+import 'package:model_scope_flutter/data/models/usage_record.dart';
 import 'package:model_scope_flutter/data/repositories/model_library_repository.dart';
 import 'package:model_scope_flutter/domain/services/home_stats_builder.dart';
 
@@ -68,6 +69,47 @@ void main() {
     activeId: models.isEmpty ? null : models.first.id,
   );
 
+  /// One reply as the ledger stores it. The model's name and size are copied
+  /// onto the record exactly as the app copies them, so a test can delete the
+  /// model and still expect the figures to stand.
+  UsageRecord record({
+    required DateTime at,
+    ModelDescriptor? model,
+    String? modelId,
+    int latencyMs = 100,
+    double tokensPerSecond = 50,
+    int tokenCount = 40,
+  }) => UsageRecord(
+    at: at,
+    modelId: modelId ?? model?.id ?? '',
+    modelName: model?.name ?? '',
+    paramLabel: model?.paramLabel,
+    quantization: model?.quantization ?? '',
+    latencyMs: latencyMs,
+    tokensPerSecond: tokensPerSecond,
+    tokenCount: tokenCount,
+  );
+
+  UsageRecord agentRecord({required DateTime at, ModelDescriptor? model}) =>
+      UsageRecord(
+        at: at,
+        kind: UsageKind.agentRun,
+        modelId: model?.id ?? '',
+        modelName: model?.name ?? '',
+        agentId: 'web_answer',
+        latencyMs: 0,
+        tokensPerSecond: 0,
+        tokenCount: 0,
+      );
+
+  UsageLedger ledgerOf(List<UsageRecord> records) {
+    var ledger = UsageLedger.empty;
+    for (final entry in records) {
+      ledger = ledger.plus(entry);
+    }
+    return ledger;
+  }
+
   group('buildHomeStats', () {
     test('reports zeros on a device that has done nothing', () {
       final stats = buildHomeStats(
@@ -86,43 +128,28 @@ void main() {
     });
 
     test('chatting alone never produces an agent run', () {
-      // The two counts are folded from different stores, so no amount of
+      // The two counts come off different kinds of record, so no amount of
       // chatting can move the agent tile.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[reply(id: 'a1', at: now)],
-        ),
-      ];
-
       final stats = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[small]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[record(at: now, model: small)]),
       );
 
       check(stats.agentRuns).equals(0);
       check(stats.agentCount).equals(0);
     });
 
-    test('totals and means fold over every reply, ignoring user turns', () {
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            question('q1', now),
-            reply(id: 'a1', at: now, latencyMs: 100, tokenCount: 30),
-            reply(id: 'a2', at: now, latencyMs: 300, tokenCount: 70),
-          ],
-        ),
-      ];
-
+    test('totals and means fold over every recorded reply', () {
       final stats = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[small]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: now, model: small, latencyMs: 100, tokenCount: 30),
+          record(at: now, model: small, latencyMs: 300, tokenCount: 70),
+        ]),
       );
 
       check(stats.totalTokens).equals(100);
@@ -130,27 +157,14 @@ void main() {
     });
 
     test('peak throughput names the model that reached it', () {
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            reply(id: 'a1', at: now, tokensPerSecond: 94.2),
-          ],
-        ),
-        session(
-          id: 's2',
-          modelId: large.id,
-          messages: <ChatMessage>[
-            reply(id: 'a2', at: now, tokensPerSecond: 41.0),
-          ],
-        ),
-      ];
-
       final stats = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[small, large]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: now, model: small, tokensPerSecond: 94.2),
+          record(at: now, model: large, tokensPerSecond: 41.0),
+        ]),
       );
 
       // The smaller model is faster, so it gets the caption.
@@ -159,23 +173,15 @@ void main() {
     });
 
     test('replies today are counted from midnight, not from 24h ago', () {
-      // One reply late yesterday, one early today.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            reply(id: 'a1', at: DateTime(2026, 10, 2, 23, 50)),
-            reply(id: 'a2', at: DateTime(2026, 10, 3, 0, 10)),
-            reply(id: 'a3', at: DateTime(2026, 10, 3, 9)),
-          ],
-        ),
-      ];
-
       final stats = buildHomeStats(
-        sessions: sessions,
+        sessions: <ChatSession>[session(id: 's1', modelId: small.id)],
         library: libraryOf(<ModelDescriptor>[small]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: DateTime(2026, 10, 2, 23, 50), model: small),
+          record(at: DateTime(2026, 10, 3, 0, 10), model: small),
+          record(at: DateTime(2026, 10, 3, 9), model: small),
+        ]),
       );
 
       check(stats.repliesToday).equals(2);
@@ -184,21 +190,14 @@ void main() {
 
     test('the trend holds seven buckets and leaves quiet days null', () {
       // One reply today, one three days back.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            reply(id: 'a1', at: DateTime(2026, 10, 3, 9), latencyMs: 400),
-            reply(id: 'a2', at: DateTime(2026, 9, 30, 9), latencyMs: 600),
-          ],
-        ),
-      ];
-
       final trend = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[small]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: DateTime(2026, 10, 3, 9), model: small, latencyMs: 400),
+          record(at: DateTime(2026, 9, 30, 9), model: small, latencyMs: 600),
+        ]),
       ).latencyTrend;
 
       // Oldest first, today last, gaps where nothing was generated.
@@ -212,33 +211,36 @@ void main() {
 
     test('throughput bars sort by parameter count, not alphabetically', () {
       // `1.5B` sorts before `360M` as a string, and must not.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: large.id,
-          messages: <ChatMessage>[
-            reply(id: 'a1', at: now, tokensPerSecond: 40),
-            reply(id: 'a2', at: now, tokensPerSecond: 42),
-          ],
-        ),
-        session(
-          id: 's2',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            reply(id: 'a3', at: now, tokensPerSecond: 94),
-          ],
-        ),
-      ];
-
       final bars = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[small, large]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: now, model: large, tokensPerSecond: 40),
+          record(at: now, model: large, tokensPerSecond: 42),
+          record(at: now, model: small, tokensPerSecond: 94),
+        ]),
       ).throughputBySize;
 
       check(bars.map((bar) => bar.paramLabel).toList())
           .deepEquals(<String>['360M', '1.5B']);
       check(bars.last.tokensPerSecond).equals(41);
+    });
+
+    test('a bar survives the model that earned it being deleted', () {
+      // The size is recorded on every row, so an uninstall cannot silently
+      // empty the chart of work that really happened.
+      final bars = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: ModelLibrary.empty,
+        now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: now, model: small, tokensPerSecond: 94),
+        ]),
+      ).throughputBySize;
+
+      check(bars.single.paramLabel).equals('360M');
+      check(bars.single.tokensPerSecond).equals(94);
     });
 
     test('a model with no parameter label is left off the size axis', () {
@@ -248,18 +250,12 @@ void main() {
         name: 'Mystery',
         paramLabel: null,
       );
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: unlabelled.id,
-          messages: <ChatMessage>[reply(id: 'a1', at: now)],
-        ),
-      ];
 
       final bars = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[unlabelled]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[record(at: now, model: unlabelled)]),
       ).throughputBySize;
 
       // An unlabelled bar would say nothing about size.
@@ -268,21 +264,14 @@ void main() {
 
     test('models with runs come first, unused ones follow at zero', () {
       // `large` is installed but has never answered.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: small.id,
-          messages: <ChatMessage>[
-            reply(id: 'a1', at: DateTime(2026, 10, 3, 10), latencyMs: 118),
-            reply(id: 'a2', at: DateTime(2026, 10, 3, 11), latencyMs: 122),
-          ],
-        ),
-      ];
-
       final usage = buildHomeStats(
-        sessions: sessions,
+        sessions: const <ChatSession>[],
         library: libraryOf(<ModelDescriptor>[large, small]),
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: DateTime(2026, 10, 3, 10), model: small, latencyMs: 118),
+          record(at: DateTime(2026, 10, 3, 11), model: small, latencyMs: 122),
+        ]),
       ).modelUsage;
 
       check(usage).length.equals(2);
@@ -292,6 +281,67 @@ void main() {
       check(usage.first.lastUsedAt).equals(DateTime(2026, 10, 3, 11));
       check(usage.last.runs).equals(0);
       check(usage.last.lastUsedAt).isNull();
+    });
+
+    test('deleting every session leaves the figures exactly as they were', () {
+      // The whole reason the ledger exists. Same ledger, same library, and
+      // the sessions gone: nothing a user deleted may lower a figure for
+      // work the device really did.
+      final ledger = ledgerOf(<UsageRecord>[
+        record(at: now, model: small, latencyMs: 118, tokenCount: 30),
+        record(at: now, model: small, latencyMs: 122, tokenCount: 70),
+        agentRecord(at: now, model: small),
+      ]);
+      final library = libraryOf(<ModelDescriptor>[small]);
+
+      final before = buildHomeStats(
+        sessions: <ChatSession>[
+          session(
+            id: 's1',
+            modelId: small.id,
+            messages: <ChatMessage>[
+              question('q1', now),
+              reply(id: 'a1', at: now),
+            ],
+          ),
+        ],
+        library: library,
+        now: now,
+        usage: ledger,
+      );
+
+      final after = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: library,
+        now: now,
+        usage: ledger,
+      );
+
+      check(after.totalTokens).equals(before.totalTokens);
+      check(after.averageLatencyMs).equals(before.averageLatencyMs);
+      check(after.peakTokensPerSecond).equals(before.peakTokensPerSecond);
+      check(after.repliesToday).equals(before.repliesToday);
+      check(after.agentRuns).equals(before.agentRuns);
+      check(after.modelUsage.first.runs).equals(before.modelUsage.first.runs);
+      check(after.throughputBySize.length)
+          .equals(before.throughputBySize.length);
+
+      // Only the count of what exists moves, which is the honest part.
+      check(before.sessionCount).equals(1);
+      check(after.sessionCount).equals(0);
+    });
+
+    test('a deleted model keeps its row, marked as gone', () {
+      final usage = buildHomeStats(
+        sessions: const <ChatSession>[],
+        library: ModelLibrary.empty,
+        now: now,
+        usage: ledgerOf(<UsageRecord>[record(at: now, model: small)]),
+      ).modelUsage;
+
+      check(usage.single.name).equals('SmolLM2 360M Instruct');
+      check(usage.single.runs).equals(1);
+      check(usage.single.isInstalled).isFalse();
     });
 
     test('activity merges sessions and downloads, newest first', () {
@@ -326,28 +376,28 @@ void main() {
 
     test('a session whose model was removed still reports', () {
       // The weights are gone from the library, the transcript is not.
-      final sessions = <ChatSession>[
-        session(
-          id: 's1',
-          modelId: 'gone/forever.gguf',
-          messages: <ChatMessage>[reply(id: 'a1', at: now, tokenCount: 12)],
-        ),
-      ];
-
       final stats = buildHomeStats(
-        sessions: sessions,
+        sessions: <ChatSession>[
+          session(
+            id: 's1',
+            modelId: 'gone/forever.gguf',
+            messages: <ChatMessage>[reply(id: 'a1', at: now, tokenCount: 12)],
+          ),
+        ],
         library: ModelLibrary.empty,
         now: now,
+        usage: ledgerOf(<UsageRecord>[
+          record(at: now, modelId: 'gone/forever.gguf', tokenCount: 12),
+        ]),
       );
 
-      // The tokens still count; only the model's name is unknown.
+      // The tokens still count, and the feed says the weights are gone.
       check(stats.totalTokens).equals(12);
-      check(stats.peakModelName).isNull();
       check(stats.activity.first.subtitle).startsWith('removed model');
     });
 
     test('a session created before any model says so', () {
-      // The blank session seeded on first launch carries no model id.
+      // A session started before anything was installed carries no model id.
       final sessions = <ChatSession>[session(id: 's1', modelId: '')];
 
       final stats = buildHomeStats(
@@ -360,15 +410,18 @@ void main() {
       check(stats.activity.first.subtitle).equals('no model · 0 messages');
     });
 
-    test('counts the stored agent runs and the agents available', () {
+    test('counts the agent runs ever recorded, and the agents available', () {
       final stats = buildHomeStats(
         sessions: const <ChatSession>[],
         library: ModelLibrary.empty,
         now: now,
-        runs: <AgentRun>[
-          fakeAgentRun(id: 'r1'),
-          fakeAgentRun(id: 'r2'),
-        ],
+        usage: ledgerOf(<UsageRecord>[
+          agentRecord(at: now),
+          agentRecord(at: now),
+        ]),
+        // Only one trace is still in the capped history file. The tile counts
+        // runs, not traces, so it must not follow this number down.
+        runs: <AgentRun>[fakeAgentRun(id: 'r1')],
         agentCount: 4,
       );
 
@@ -383,6 +436,7 @@ void main() {
         sessions: const <ChatSession>[],
         library: ModelLibrary.empty,
         now: now,
+        usage: ledgerOf(<UsageRecord>[agentRecord(at: now)]),
         runs: <AgentRun>[fakeAgentRun()],
         agentCount: 1,
       );

@@ -10,6 +10,8 @@ import '../../data/models/agent_run.dart';
 import '../../data/models/agent_template.dart';
 import '../../data/models/catalog_model.dart';
 import '../../data/models/model_descriptor.dart';
+import '../../data/models/sampler_settings.dart';
+import '../../data/models/usage_record.dart';
 import '../../domain/services/agent_runner.dart';
 import '../../domain/services/model_loader.dart';
 import 'agent_run_state.dart';
@@ -46,7 +48,7 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
           .read(agentValidatorProvider)
           .check(
             agent.template,
-            hasModel: library.models.isNotEmpty,
+            hasModel: library.chatModels.isNotEmpty,
             values: agent.template.defaultValues,
           );
 
@@ -57,10 +59,10 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
             : AgentRunStatus.blocked,
         values: Map<String, String>.of(agent.template.defaultValues),
         modelId: library.activeId,
-        installed: library.models,
+        installed: library.chatModels,
         error: availability.firstBlocker,
         toolWarning: await _toolWarningFor(
-          _named(library.models, library.activeId),
+          _named(library.chatModels, library.activeId),
           agent.template,
         ),
         history: <AgentRun>[
@@ -82,9 +84,41 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
     }
   }
 
-  void setValue(String name, String value) => state = state.copyWith(
-    values: <String, String>{...state.values, name: value},
-  );
+  /// Records what the user typed, and rechecks whether the agent can run.
+  ///
+  /// The recheck matters for an agent with a required input that ships with
+  /// no default — Document QnA's file, which cannot have one. Opening it
+  /// blocks on `Document needs a value`, and without re-validating here the
+  /// run button would stay disabled no matter what the user chose.
+  Future<void> setValue(String name, String value) async {
+    state = state.copyWith(
+      values: <String, String>{...state.values, name: value},
+    );
+
+    final template = state.agent?.template;
+    // Only while idle or blocked: a run in flight must not have the button
+    // re-enabled underneath it.
+    if (template == null ||
+        (state.status != AgentRunStatus.blocked &&
+            state.status != AgentRunStatus.idle)) {
+      return;
+    }
+
+    final values = state.values;
+    final availability = await ref
+        .read(agentValidatorProvider)
+        .check(template, hasModel: state.installed.isNotEmpty, values: values);
+    // The fields can be typed in again while the check is running.
+    if (!ref.mounted || state.values != values) return;
+
+    state = state.copyWith(
+      status: availability.canRun
+          ? AgentRunStatus.idle
+          : AgentRunStatus.blocked,
+      error: availability.firstBlocker,
+      clearError: availability.canRun,
+    );
+  }
 
   Future<void> selectModel(String id) async {
     state = state.copyWith(modelId: id);
@@ -151,7 +185,8 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
     clearError: true,
   );
 
-  /// Loads the model, then walks the pipeline.
+  /// Indexes the document if there is one, loads the model, then walks the
+  /// pipeline.
   Future<void> run() async {
     final agent = state.agent;
     if (agent == null || state.isRunning) return;
@@ -174,6 +209,11 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
       clearNotice: true,
       clearError: true,
     );
+
+    // Before the weights, not after: indexing loads the encoder, and holding
+    // two models at once on a phone is how an allocation fails.
+    if (!await _indexDocument(agent.template)) return;
+
     _append('load', 'Loading ${model.name} from ${model.localPath}');
 
     final notice = await _loadWeights(model);
@@ -189,6 +229,92 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
         .read(agentRunnerProvider)
         .run(agent.template, values: state.values, modelId: model.id)
         .listen(_onEvent, onError: _onStreamError);
+  }
+
+  /// Reads, chunks and encodes the document [template] takes, if it takes one.
+  ///
+  /// Returns whether the run may continue. A template with no file input is
+  /// nothing to do and passes straight through; a failure here ends the run
+  /// before any weights are loaded, because an agent that retrieves from an
+  /// empty index would answer confidently out of nothing.
+  Future<bool> _indexDocument(AgentTemplate template) async {
+    final input = template.fileInput;
+    if (input == null) return true;
+
+    final path = (state.values[input.name] ?? '').trim();
+    if (path.isEmpty) {
+      _fail('${input.label} needs a file before this agent can run.');
+      return false;
+    }
+
+    final library = await ref.read(modelLibraryViewModelProvider.future);
+    final embedder = library.embeddingModel;
+    if (embedder == null) {
+      _fail(
+        'No embedding model is installed. Download one under Settings to '
+        'search a document.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(status: AgentRunStatus.indexing);
+    try {
+      await for (final progress
+          in ref
+              .read(documentIngestorProvider)
+              .ingest(path: path, embeddingModel: embedder)) {
+        // Left the screen mid-index: nothing left to report to.
+        if (!ref.mounted || state.status != AgentRunStatus.indexing) {
+          return false;
+        }
+        _append('index', progress.message);
+      }
+    } catch (error, stackTrace) {
+      developer.log(
+        'Could not index the document for ${template.id}',
+        name: _logName,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _fail('$error');
+      return false;
+    }
+
+    // Tells the retrieval tool how many passages to fetch and which model
+    // encoded them, since the tool was built long before this run existed.
+    ref
+        .read(retrievalSettingsProvider)
+        .apply(
+          topK: int.tryParse((state.values['top_k'] ?? '').trim()),
+          embeddingModel: embedder,
+        );
+    // So the Settings card shows what was just indexed.
+    ref.read(documentIndexProvider.notifier).refresh();
+
+    state = state.copyWith(status: AgentRunStatus.preparing);
+    return true;
+  }
+
+  /// [base] with whatever temperature this run should use.
+  ///
+  /// A run samples low by default, because a step is instruction-following —
+  /// call this tool, with these arguments — and sampling loosely there only
+  /// makes a small model ignore the tool. Two things may raise it: the
+  /// template, for an agent that writes prose from retrieved material, and an
+  /// input literally named `temperature`, which lets the user try the same
+  /// agent at several settings without editing the file.
+  SamplerSettings _samplerFor(SamplerSettings base) {
+    final template = state.agent?.template;
+    final typed = double.tryParse((state.values['temperature'] ?? '').trim());
+    final wanted = typed ?? template?.temperature;
+    if (wanted == null) return base;
+    return base.copyWith(temperature: wanted.clamp(0, 2));
+  }
+
+  /// Ends the run before it started, with [reason] on screen and in the log.
+  void _fail(String reason) {
+    _append('error', reason, isError: true);
+    state = state.copyWith(status: AgentRunStatus.finished, error: reason);
   }
 
   /// Asks the model to stop and records what the run managed before it did.
@@ -208,12 +334,21 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
 
   Future<void> _abandon() async {
     final run = _recordOf(error: 'Stopped before it finished.');
-    ref.read(llmServiceProvider).stop();
+    // Read up front: this runs while the screen is being torn down, so by
+    // the awaits below the notifier may be gone.
+    final usage = _usageOf(run);
+    final llm = ref.read(llmServiceProvider);
+
+    llm.stop();
     await _events?.cancel();
     _events = null;
     await ref.read(agentRunRepositoryProvider).add(run);
-    ref.invalidate(agentRunsProvider);
-    await ref.read(llmServiceProvider).dispose();
+    // A run the user walked away from still ran, so it still counts.
+    if (ref.mounted) {
+      await _recordUsage(usage);
+      if (ref.mounted) ref.invalidate(agentRunsProvider);
+    }
+    await llm.dispose();
   }
 
   /// The model this run uses: the one picked on screen, or the active one.
@@ -228,9 +363,7 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
       return await loadWithFallback(
         llm: ref.read(llmServiceProvider),
         model: model,
-        // A step is instruction-following — call this tool, with these
-        // arguments — so it samples low whatever the Chat sliders say.
-        settings: sampler.forAgentRun(),
+        settings: _samplerFor(sampler.forAgentRun()),
         runtime: await ref.read(appSettingsViewModelProvider.future),
         projectorPath: library.projectorFor(model.repoId)?.localPath,
       );
@@ -284,10 +417,41 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
     );
     _append('done', run.error ?? 'Finished in ${run.durationMs}ms');
 
+    // Built before the awaits below, because each is a chance for the screen
+    // to be left and this notifier disposed, after which `state` is gone.
+    final usage = _usageOf(run);
+    final llm = ref.read(llmServiceProvider);
+
     await ref.read(agentRunRepositoryProvider).add(run);
-    ref.invalidate(agentRunsProvider);
-    await ref.read(llmServiceProvider).dispose();
+    // Every provider touched after an await is guarded: leaving the screen
+    // while the run was finishing disposes this notifier, and reaching for a
+    // provider through a dead ref throws.
+    if (ref.mounted) {
+      await _recordUsage(usage);
+      if (ref.mounted) ref.invalidate(agentRunsProvider);
+    }
+    await llm.dispose();
   }
+
+  /// This run as one row of the lifetime ledger.
+  ///
+  /// The run history file is capped at fifty, so the AGENT RUNS tile cannot
+  /// come from it without quietly plateauing. The ledger counts them for
+  /// good, and carries no token figures — a run's throughput is spread over
+  /// several steps and is not one reply's worth of anything.
+  UsageRecord _usageOf(AgentRun run) => UsageRecord(
+    at: run.startedAt,
+    kind: UsageKind.agentRun,
+    modelId: run.modelId,
+    modelName: _named(state.installed, run.modelId)?.name ?? '',
+    agentId: state.agent?.id ?? run.agentId,
+    tokenCount: 0,
+    latencyMs: 0,
+    tokensPerSecond: 0,
+  );
+
+  Future<void> _recordUsage(UsageRecord usage) =>
+      ref.read(usageLedgerProvider.notifier).record(usage);
 
   AgentRun _recordOf({required String error}) {
     final agent = state.agent;

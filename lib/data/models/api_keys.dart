@@ -1,6 +1,5 @@
 /// Which third-party credential a field holds. [huggingFace] pulls model
-/// weights; the other two back the web tools a model can call, which are built
-/// but not yet attached to a chat — that happens on the Agent tab.
+/// weights; the other two back the web tools agents call.
 enum ApiKeyKind {
   huggingFace(
     label: 'Hugging Face',
@@ -11,7 +10,7 @@ enum ApiKeyKind {
   firecrawl(
     label: 'Firecrawl',
     hint: 'fc-...',
-    caption: 'Web scraping for the price agent',
+    caption: 'Reading web pages for agents',
     storageKey: 'firecrawl_key',
   ),
   tavily(
@@ -37,7 +36,12 @@ enum ApiKeyKind {
   final String storageKey;
 
   /// Whether this build can check the key against its service.
-  bool get isVerifiable => this == ApiKeyKind.huggingFace;
+  ///
+  /// True for all three: each service has an endpoint that reports on the key
+  /// — an account for Hugging Face, a usage figure for the other two — without
+  /// spending any of its allowance. The getter stays because a credential
+  /// added later may have nowhere free to check it.
+  bool get isVerifiable => true;
 }
 
 /// The outcome of pressing Verify on one key.
@@ -54,10 +58,12 @@ class VerifyChecking extends VerifyState {
 }
 
 class VerifyPassed extends VerifyState {
-  const VerifyPassed(this.accountName);
+  const VerifyPassed(this.summary);
 
-  /// The Hugging Face username the token belongs to.
-  final String accountName;
+  /// The whole caption, ready to show: `Verified as octocat`, or a plan and
+  /// a credit figure. Each service says something different about a good key,
+  /// so the sentence is built where it is known rather than reassembled here.
+  final String summary;
 }
 
 class VerifyFailed extends VerifyState {

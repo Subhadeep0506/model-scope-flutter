@@ -15,6 +15,7 @@ import '../../data/repositories/model_library_repository.dart';
 import '../widgets/about_card.dart';
 import '../widgets/api_key_card.dart';
 import '../widgets/appearance_selector.dart';
+import '../widgets/document_index_card.dart';
 import '../widgets/installed_model_card.dart';
 import '../widgets/runtime_defaults_card.dart';
 import '../widgets/section_heading.dart';
@@ -83,6 +84,7 @@ class SettingsScreen extends ConsumerWidget {
               child: const SectionHeading(title: 'Storage'),
             ),
             _Block(top: metrics.gapMd, child: const StorageCard()),
+            _Block(top: metrics.gapMd, child: const DocumentIndexCard()),
             _Block(
               top: metrics.gapXl,
               child: const SectionHeading(title: 'About'),

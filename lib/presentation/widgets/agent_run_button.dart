@@ -8,6 +8,10 @@ import '../../config/theme/app_palette.dart';
 /// Its label says what pressing it will actually do: `Run with defaults` when
 /// nothing has been edited, `Run configured` once something has, and `Stop`
 /// while a run is going — one button rather than two, as the mockups draw it.
+///
+/// Indexing is the exception: reading and encoding a long PDF takes tens of
+/// seconds before the first step runs, and a button reading `Stop` with
+/// nothing yet in the trace looks like a stalled run rather than a busy one.
 class AgentRunButton extends StatelessWidget {
   const AgentRunButton({
     super.key,
@@ -16,10 +20,14 @@ class AgentRunButton extends StatelessWidget {
     required this.enabled,
     required this.onRun,
     required this.onStop,
+    this.isIndexing = false,
   });
 
   final bool isRunning;
   final bool usesDefaults;
+
+  /// Whether the document is still being read and encoded.
+  final bool isIndexing;
 
   /// False when something stops the agent running — no model, no key.
   final bool enabled;
@@ -31,18 +39,27 @@ class AgentRunButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final metrics = context.metrics;
-    final label = isRunning
+    final label = isIndexing
+        ? 'Indexing the document…'
+        : isRunning
         ? 'Stop'
         : (usesDefaults ? 'Run with defaults' : 'Run configured');
 
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: isRunning ? onStop : (enabled ? onRun : null),
-        icon: Icon(
-          isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
-          size: 20,
-        ),
+        onPressed: isIndexing
+            ? null
+            : (isRunning ? onStop : (enabled ? onRun : null)),
+        icon: isIndexing
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                size: 20,
+              ),
         label: Text(label),
         style: FilledButton.styleFrom(
           backgroundColor: palette.primary,

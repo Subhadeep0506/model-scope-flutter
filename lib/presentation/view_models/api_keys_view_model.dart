@@ -26,8 +26,11 @@ class ApiKeysViewModel extends AsyncNotifier<ApiKeysState> {
     await ref.read(apiKeyRepositoryProvider).write(kind, value);
   }
 
-  /// Checks the Hugging Face token against `/api/whoami-v2`. Only that one is
-  /// verifiable — nothing in this build consumes the other keys yet.
+  /// Checks a key against its own service and reports what came back.
+  ///
+  /// The token comes from state rather than the keychain: the card flushes
+  /// what is on screen before calling this, and state is written before that
+  /// write completes — so Verify always checks what the user is looking at.
   Future<void> verify(ApiKeyKind kind) async {
     if (!kind.isVerifiable) return;
 
@@ -39,10 +42,10 @@ class ApiKeysViewModel extends AsyncNotifier<ApiKeysState> {
 
     _setVerification(kind, const VerifyChecking());
     try {
-      final account = await ref
-          .read(huggingFaceRepositoryProvider)
-          .verifyToken(token);
-      _setVerification(kind, VerifyPassed(account));
+      final summary = await ref
+          .read(apiKeyVerifierProvider)
+          .verify(kind, token);
+      _setVerification(kind, VerifyPassed(summary));
     } catch (error) {
       _setVerification(kind, VerifyFailed('$error'));
     }

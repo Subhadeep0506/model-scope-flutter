@@ -22,4 +22,5 @@ const _$ModelCapabilityEnumMap = {
   ModelCapability.textToText: 'text_to_text',
   ModelCapability.imageToText: 'image_to_text',
   ModelCapability.toolCalling: 'tool_calling',
+  ModelCapability.textEmbedding: 'text_embedding',
 };

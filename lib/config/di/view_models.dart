@@ -8,6 +8,7 @@ import '../../data/models/gguf_file.dart';
 import '../../data/models/hf_repo_summary.dart';
 import '../../data/models/home_stats.dart';
 import '../../data/models/sampler_settings.dart';
+import '../../data/models/usage_record.dart';
 import '../../data/repositories/agent_repository.dart';
 import '../../data/repositories/model_library_repository.dart';
 import '../../data/sources/hf_api_client.dart';
@@ -23,12 +24,14 @@ import '../../presentation/view_models/catalog_state.dart';
 import '../../presentation/view_models/catalog_view_model.dart';
 import '../../presentation/view_models/chat_state.dart';
 import '../../presentation/view_models/chat_view_model.dart';
+import '../../presentation/view_models/document_index_view_model.dart';
 import '../../presentation/view_models/download_view_model.dart';
 import '../../presentation/view_models/model_library_view_model.dart';
 import '../../presentation/view_models/sampler_view_model.dart';
 import '../../presentation/view_models/session_filter_view_model.dart';
 import '../../presentation/view_models/sessions_view_model.dart';
 import '../../presentation/view_models/storage_view_model.dart';
+import '../../presentation/view_models/usage_ledger_view_model.dart';
 import 'providers.dart';
 
 final sessionsViewModelProvider =
@@ -75,6 +78,12 @@ final storageViewModelProvider = AsyncNotifierProvider<StorageViewModel, int>(
   StorageViewModel.new,
 );
 
+/// What the local vector database is holding, for the Settings card.
+final documentIndexProvider =
+    NotifierProvider<DocumentIndexViewModel, DocumentIndexState>(
+      DocumentIndexViewModel.new,
+    );
+
 /// Every agent the app can run, built-in and custom.
 final agentsProvider = FutureProvider<List<Agent>>(
   (ref) => ref.watch(agentRepositoryProvider).load(),
@@ -119,6 +128,12 @@ final filteredSessionsProvider = Provider<List<ChatSession>>((ref) {
   return sessions.where((session) => filter.matches(session, now)).toList();
 });
 
+/// The lifetime record every performance figure on Home is folded out of.
+final usageLedgerProvider =
+    AsyncNotifierProvider<UsageLedgerViewModel, UsageLedger>(
+      UsageLedgerViewModel.new,
+    );
+
 final homeStatsProvider = Provider<HomeStats>(
   (ref) => buildHomeStats(
     sessions:
@@ -126,6 +141,7 @@ final homeStatsProvider = Provider<HomeStats>(
     library:
         ref.watch(modelLibraryViewModelProvider).value ?? ModelLibrary.empty,
     now: DateTime.now(),
+    usage: ref.watch(usageLedgerProvider).value ?? UsageLedger.empty,
     runs: ref.watch(agentRunsProvider).value ?? const <AgentRun>[],
     agentCount: ref.watch(agentsProvider).value?.length ?? 0,
   ),

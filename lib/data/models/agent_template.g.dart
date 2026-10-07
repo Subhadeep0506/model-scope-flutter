@@ -93,6 +93,7 @@ AgentTemplate _$AgentTemplateFromJson(Map<String, dynamic> json) =>
       createdAt: json['created_at'] == null
           ? null
           : DateTime.parse(json['created_at'] as String),
+      temperature: (json['temperature'] as num?)?.toDouble(),
     );
 
 Map<String, dynamic> _$AgentTemplateToJson(AgentTemplate instance) =>
@@ -108,4 +109,5 @@ Map<String, dynamic> _$AgentTemplateToJson(AgentTemplate instance) =>
       'pipeline': instance.pipeline.map((e) => e.toJson()).toList(),
       'answer': instance.answer.toJson(),
       'created_at': instance.createdAt?.toIso8601String(),
+      'temperature': instance.temperature,
     };

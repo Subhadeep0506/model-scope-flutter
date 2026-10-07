@@ -175,10 +175,9 @@ class _VerifyButton extends StatelessWidget {
 
     return Tooltip(
       message: kind.isVerifiable
-          ? 'Check this key against ${kind.label}'
-          : 'Nothing in this build uses a ${kind.label} key yet',
+          ? 'Check this key against ${kind.label}. Costs no credits.'
+          : 'There is no free way to check a ${kind.label} key',
       child: OutlinedButton(
-        // Disabled, not hidden, for the two keys this build only stores.
         onPressed: kind.isVerifiable && !checking ? onPressed : null,
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(0, 48),
@@ -205,10 +204,7 @@ class _Caption extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final (text, colour) = switch (state) {
-      VerifyPassed(:final accountName) => (
-        'Verified as $accountName',
-        palette.primary,
-      ),
+      VerifyPassed(:final summary) => (summary, palette.primary),
       VerifyFailed(:final reason) => (reason, palette.danger),
       _ => (kind.caption, palette.muted),
     };
