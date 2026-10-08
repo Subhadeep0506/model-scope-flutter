@@ -5,7 +5,7 @@
   "purpose": "Compare prices for a product across retailers",
   "description": "Searches the web for a product, reads the most promising retailer page, normalises price and shipping, then ranks what it found. Tests web search, scraping and numeric reasoning in one run.",
   "icon": "tag",
-  "system_prompt": "You are a smart shopping assistant. Use only prices the tools actually returned - never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
+  "system_prompt": "You are a smart shopping assistant. Use only prices that appear in the material you are given - never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
   "inputs": [
     {
       "name": "product",
@@ -18,7 +18,12 @@
       "name": "region",
       "label": "Region",
       "type": "choice",
-      "options": ["IN", "US", "UK", "EU"],
+      "options": [
+        "IN",
+        "US",
+        "UK",
+        "EU"
+      ],
       "default": "IN",
       "required": true
     }
@@ -35,18 +40,81 @@
       "id": "page",
       "kind": "tool",
       "tool": "read_web_page",
-      "reads": ["step.search"],
+      "reads": [
+        "step.search"
+      ],
       "prompt": "Pick the result above that looks most like a retailer's product page and read it. Pass its URL to the tool exactly as it appears."
     },
     {
       "id": "offers",
       "kind": "reason",
-      "reads": ["step.search", "step.page"],
+      "reads": [
+        "step.search",
+        "step.page"
+      ],
       "prompt": "List every retailer you have a price for, one per line, as: retailer -> price -> shipping -> stock. Write 'NA' for anything the material does not give. Do not invent a figure."
     }
   ],
   "answer": {
-    "prompt": "Rank the offers by total landed price, cheapest first. Say which is cheapest overall and which is best if the buyer wants it quickly, and give the difference between them in money. If only one price was found, say so instead of ranking.",
-    "reads": ["step.offers"]
+    "prompt": "Return the offers you have prices for, cheapest first. Copy every figure from the material above exactly - never estimate one. Use the currency the material used. For an offer the material does not give a shipping cost, stock state or delivery time for, write 'NA' in that field rather than guessing. Name the retailer with the lowest total landed price as cheapest_retailer, the one you would pick if the buyer wants it quickly as best_for_speed, and the difference in money between those two as price_gap. If only one offer has a price, repeat that retailer in both and set price_gap to 0.",
+    "reads": [
+      "step.offers"
+    ],
+    "view": "price_table",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "product": {
+          "type": "string"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "offers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "retailer": {
+                "type": "string"
+              },
+              "price": {
+                "type": "number"
+              },
+              "shipping": {
+                "type": "string"
+              },
+              "stock": {
+                "type": "string"
+              },
+              "delivery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "retailer",
+              "price",
+              "shipping",
+              "stock"
+            ]
+          }
+        },
+        "cheapest_retailer": {
+          "type": "string"
+        },
+        "best_for_speed": {
+          "type": "string"
+        },
+        "price_gap": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "product",
+        "currency",
+        "offers",
+        "cheapest_retailer"
+      ]
+    }
   }
 }

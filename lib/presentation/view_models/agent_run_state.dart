@@ -115,6 +115,29 @@ class AgentRunState {
   /// The rows on screen: the live run's, or the one being looked back at.
   List<TraceEntry> get visibleTrace => viewing?.trace ?? trace;
 
+  /// Whether the output on screen should be drawn as a component rather than
+  /// as prose.
+  ///
+  /// A past run answers from what it recorded, not from the template: an
+  /// agent given a schema today must not make last week's prose runs try to
+  /// render as a table, and one whose schema was removed must not stop its
+  /// old structured runs drawing.
+  bool get showsStructured => viewing != null
+      ? viewing?.view != null
+      : agent?.template.answer.isStructured ?? false;
+
+  /// Which component draws it, from the same two sources.
+  String? get visibleView {
+    final past = viewing;
+    if (past != null) {
+      // Recorded as empty for a structured run whose agent named no view,
+      // which falls back to the generic table — same as a null here would.
+      final recorded = past.view ?? '';
+      return recorded.isEmpty ? null : recorded;
+    }
+    return agent?.template.answer.view;
+  }
+
   /// The text on screen, from the same two sources as [visibleTrace].
   ///
   /// Stripped of any reasoning block. The tokens arrive raw so the screen can

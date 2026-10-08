@@ -24,7 +24,7 @@ Run these from the project root (`model_scope_flutter/`).
 [app_cache_service.dart:18](lib/domain/services/app_cache_service.dart#L18). That
 one is deliberate and known. If you ever see **2** issues, your change caused it.
 
-**`flutter test` should say `683 passed`.** If the number drops, you broke
+**`flutter test` should say `736 passed`.** If the number drops, you broke
 something. If it rises, you added a test — good.
 
 There is nothing to run locally on this machine. The only way to see the app
@@ -389,16 +389,87 @@ ways, and both accept `input.<name>` (what the user typed) or `step.<id>`
 A step can only read something that comes **before** it. Reading a later step
 is caught before the agent runs.
 
+### Structured responses
+
+An agent can answer with **data instead of prose**, drawn on screen as a table
+or a chart. Two fields on the `answer` block turn it on:
+
+```jsonc
+"answer": {
+  "prompt": "Return every offer you have a price for...",
+  "reads": ["step.offers"],
+
+  "view": "price_table",        // which component draws it
+  "schema": {                   // what the model must return
+    "type": "object",
+    "properties": {
+      "offers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "retailer": { "type": "string" },
+            "price":    { "type": "number" }
+          },
+          "required": ["retailer", "price"]
+        }
+      },
+      "cheapest_retailer": { "type": "string" }
+    },
+    "required": ["offers", "cheapest_retailer"]
+  }
+}
+```
+
+**The shape is forced, not requested.** `schema` is handed to the sampler,
+which will not let the model emit anything that does not match it. This is why
+it works on a 350M model: asking politely for JSON does not, but a grammar
+that refuses every other token does. Only the *values* are still the model's
+problem — valid shape is not valid data, and a small model will fill the
+fields with whatever it has.
+
+**`required` forces a field to be emitted.** Requiring a judgement the
+material does not support makes the model invent one, so require only what a
+component cannot draw without.
+
+**`view` names a component**, resolved in the presentation layer by `viewFor`
+in [structured_view.dart](lib/presentation/widgets/structured/structured_view.dart)
+— the same arrangement as an agent's icon, so `lib/data` never imports Flutter.
+Two exist: `price_table` and `weather_forecast`. **A name this build does not
+know, or none at all, falls back to a generic renderer** that turns arrays into
+tables and objects into key/value rows. That is deliberate: an agent you write
+yourself gets a real table without anyone adding code for it.
+
+To add a hand-made one: write a class implementing `StructuredView`, add it to
+`viewFor` and to `isKnownView`, and give it a line in
+[structured_summary.dart](lib/domain/services/structured_summary.dart) for the
+RUN HISTORY card. The summary lives in `domain` and the widget in
+`presentation`; they share nothing but the view name.
+
+**One caveat worth knowing.** A schema replaces the *whole* sampler, so an
+agent's `temperature` does not apply to a schema-constrained answer step. If
+you set both, the temperature is silently ignored.
+
+**If the backend refuses the schema** — llguidance compiles it at run time and
+can reject one — the run carries on unconstrained and answers as prose, with a
+line in the run log saying so. The output card falls back to markdown whenever
+the text will not parse, so a failed structured run still shows what the model
+actually said. The `{ }` toggle on the OUTPUT header shows the raw JSON.
+
 **Rules that are checked for you.** `flutter test` has a test that loads every
 file in `assets/agents/` and validates it, so a typo fails the suite rather
 than the phone. It will catch: a tool this build does not have, a step reading
-something that does not exist, two steps with the same `id`, and an unknown
-`kind` or input `type`.
+something that does not exist, two steps with the same `id`, an unknown
+`kind` or input `type`, a `schema` that is not a JSON object or requires a
+field it never declares, and a built-in agent naming a `view` that does not
+exist.
 
-**The five tools you can name** are `web_search`, `read_web_page`,
-`calculator`, `date_math` and `unit_convert` — see `ToolRegistry.standard` in
+**The seven tools you can name** are `web_search`, `read_web_page`,
+`get_weather`, `search_document`, `calculator`, `date_math` and
+`unit_convert` — see `ToolRegistry.standard` in
 [tool_registry.dart](lib/domain/tools/tool_registry.dart). The first two need
-an API key; the last three need nothing, which is why
+an API key and `search_document` needs an embedding model installed; the other
+four need nothing, which is why
 [tool_stress_test.json](assets/agents/tool_stress_test.json) runs on a fresh
 install.
 
@@ -467,6 +538,20 @@ built to measure tool calling.
    for an agent that writes prose rather than calling tools, and an input
    literally named `temperature`, which lets you try one agent at several
    settings without editing the file.
+
+**What a step passes to the next one** is every tool result it got, followed by
+whatever the model said about them. Both, always. The tool result used to be a
+fallback used only when the model said nothing at all — which meant a model
+adding "I have searched for that." after a successful call threw the search
+results away, and every later step worked from that sentence. It failed on a
+350M model and not on a 2B one, and on one run and not the next, because
+whether a small model adds a trailing sentence is a sampling decision. If you
+are ever tempted to pass on "just the model's answer", this is why not.
+
+For the same reason, an agent's `system_prompt` should say *"work only from the
+material you are given"* and never *"work only from what the tools return"*. The
+answer step has no tools by design, and a small model told to rely on tools it
+cannot see will reply that it has no tools instead of answering.
 
 Reasoning is also stripped everywhere it would travel: a step passes its answer
 to the next step, not its thinking, and `AgentRun.output` holds the answer

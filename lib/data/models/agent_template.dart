@@ -147,6 +147,8 @@ class AnswerStep {
     required this.prompt,
     this.reads = const <String>[],
     this.model,
+    this.schema,
+    this.view,
   });
 
   factory AnswerStep.fromJson(Map<String, dynamic> json) =>
@@ -161,6 +163,27 @@ class AnswerStep {
 
   /// Ignored at runtime, for the reason given on [PipelineStep.model].
   final String? model;
+
+  /// The JSON Schema the answer must match — the `Structured response` toggle
+  /// on the builder's answer card. Null means the answer is prose, which is
+  /// what every agent did before this existed.
+  ///
+  /// Held as a raw map rather than a typed class on purpose: this is a JSON
+  /// Schema, the app only passes it through to the sampler, and a typed model
+  /// would need a case for every keyword a user might write.
+  final Map<String, dynamic>? schema;
+
+  /// Which component draws the result, e.g. `price_table`.
+  ///
+  /// A name rather than anything drawable, so `lib/data` never imports
+  /// Flutter — the presentation layer resolves it, as it already does for an
+  /// agent's icon. A name this build does not know, or none at all, falls
+  /// back to a generic table, so an agent someone writes themselves still
+  /// renders as something rather than as raw JSON.
+  final String? view;
+
+  /// Whether this answer is constrained to [schema].
+  bool get isStructured => schema != null;
 
   Map<String, dynamic> toJson() => _$AnswerStepToJson(this);
 }

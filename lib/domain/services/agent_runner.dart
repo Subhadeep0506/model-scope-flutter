@@ -8,6 +8,7 @@ import '../tools/tool_registry.dart';
 import 'agent_scope.dart';
 import 'agent_validator.dart';
 import 'llm_service.dart';
+import 'structured_summary.dart';
 import 'thinking_parser.dart';
 
 sealed class AgentEvent {
@@ -51,15 +52,8 @@ class AgentRunner {
   final LlmService _llm;
   final ToolRegistry _tools;
   final AgentValidator _validator;
-
-  /// How many extra times a tool step is asked when the model answered without
-  /// reaching for the tool. The first failure is kept in the trace either way —
-  /// a model that has to be told twice is a worse model, and this app exists
-  /// to see that.
   final int toolRetries;
-
   final String Function()? newId;
-
   final DateTime Function()? now;
   static const String _logName = 'AgentRunner';
 
@@ -101,10 +95,6 @@ class AgentRunner {
       await _llm.setSystemPrompt(template.systemPrompt);
       yield _log('system', template.systemPrompt);
 
-      // A reasoning model works the answer out while thinking and then states
-      // it, rather than calling the tool it was given. Caught rather than
-      // fatal: a template with no such variable should still run, and the log
-      // is where that is worth saying.
       try {
         await _llm.setThinking(false);
         yield _log('system', 'Thinking disabled for this run.');
@@ -120,7 +110,14 @@ class AgentRunner {
           yield event;
         }
       }
-      yield* _runAnswer(template, scope, trace);
+      // `await for` rather than `yield*`, which forwards an error straight to
+      // whoever is listening and past the catch below. An answer step that
+      // failed used to take the whole stream down with it, so the run was
+      // never recorded and the partial answer was lost — unlike a pipeline
+      // step failing, which has always been caught here.
+      await for (final event in _runAnswer(template, scope, trace)) {
+        yield event;
+      }
     } catch (error, stackTrace) {
       developer.log(
         'Agent ${template.id} stopped early',
@@ -217,8 +214,6 @@ class AgentRunner {
       }
 
       if (retrying) {
-        // The failed attempt stays in the trace: a model that needs telling
-        // twice is a worse model, and hiding that would defeat the point.
         final entry = TraceEntry(
           kind: TraceKind.tool,
           label: '${step.tool} — not called, retrying',
@@ -240,17 +235,19 @@ class AgentRunner {
     }
   }
 
-  /// What a step passes on: its reply with any reasoning removed, or — when a
-  /// model called the tool and then said nothing — what the tool returned, so
-  /// the next step is not handed a blank.
   static String _outputOf(String raw, List<ToolInvocation> calls) {
     final answer = splitThinking(raw).answer;
-    if (answer.isNotEmpty || calls.isEmpty) return answer;
-    return <String>[for (final call in calls) call.result].join('\n\n').trim();
+    if (calls.isEmpty) return answer;
+
+    final results = <String>[
+      for (final call in calls)
+        if (call.result.trim().isNotEmpty) call.result.trim(),
+    ];
+    if (results.isEmpty) return answer;
+
+    return <String>[...results, if (answer.isNotEmpty) answer].join('\n\n');
   }
 
-  /// The prompt for a second attempt: the original, then a line leaving no
-  /// room for the model to answer on its own.
   static String _insistOn(PipelineStep step, String prompt) =>
       '$prompt\n\nYou did not call the ${step.tool} tool. Call it now. Do not '
       'work the answer out yourself and do not answer from memory.';
@@ -272,20 +269,45 @@ class AgentRunner {
       reads: reads,
       scope: scope,
     );
-    yield _log('step', 'answer · no tools');
+    // Constrained before the ask and lifted after it, whatever happens. An
+    // agent with no schema is left alone entirely rather than handed a null:
+    // the sampler it was loaded with is already the one it wants.
+    final schema = template.answer.schema;
+    final constrained = schema != null && await _constrain(schema);
+    if (schema != null && !constrained) {
+      yield _log(
+        'error',
+        'This model would not take the answer schema. Answering without it.',
+        isError: true,
+      );
+    }
+
+    yield _log('step', 'answer · no tools${constrained ? ' · schema' : ''}');
     yield _log('prompt', prompt);
 
+    // Caught and held rather than guarded by `finally`: the tokens have to be
+    // yielded as they arrive, and awaiting inside a `finally` that wraps a
+    // `yield` is not somewhere to put work that must happen. The constraint
+    // is lifted first, then the failure travels on unchanged.
     final buffer = StringBuffer();
-    await for (final token in _llm.ask(prompt)) {
-      buffer.write(token);
-      yield AnswerToken(token);
+    Object? failure;
+    StackTrace? failureTrace;
+    try {
+      await for (final token in _llm.ask(prompt)) {
+        buffer.write(token);
+        yield AnswerToken(token);
+      }
+    } catch (error, stackTrace) {
+      failure = error;
+      failureTrace = stackTrace;
+    }
+
+    if (constrained) await _constrain(null);
+    if (failure != null) {
+      Error.throwWithStackTrace(failure, failureTrace ?? StackTrace.current);
     }
     clock.stop();
     final raw = buffer.toString().trim();
-    // The tokens streamed raw so the screen could fill in as they arrived;
-    // what is kept is the answer alone, so the run record, its summary and the
-    // history card never carry the model's reasoning. The log keeps the raw
-    // text — that is the one place the thinking is worth reading.
     scope.record(_answerKey, splitThinking(raw).answer);
     yield _log('reply', raw.isEmpty ? '(nothing)' : raw);
 
@@ -296,6 +318,29 @@ class AgentRunner {
     );
     trace.add(entry);
     yield TraceAdded(entry);
+  }
+
+  /// Applies [schema] to the next reply, or lifts the constraint when it is
+  /// null. Returns whether a constraint is now in force.
+  ///
+  /// A schema the backend will not compile loses the shape, not the run: the
+  /// model is asked the same question unconstrained and whatever it writes is
+  /// shown as prose. Which schemas llguidance accepts is not knowable from
+  /// here, and an agent that cannot answer at all is worse than one that
+  /// answers in the wrong shape.
+  Future<bool> _constrain(Map<String, dynamic>? schema) async {
+    try {
+      await _llm.setResponseSchema(schema);
+      return schema != null;
+    } catch (error, stackTrace) {
+      developer.log(
+        'Could not ${schema == null ? 'lift' : 'apply'} the answer schema',
+        name: _logName,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
   }
 
   List<ToolDefinition> _toolsFor(PipelineStep step) {
@@ -377,6 +422,7 @@ class AgentRunner {
     String? error,
   }) {
     clock.stop();
+    final view = template.answer.view;
     return AgentRun(
       id: newId?.call() ?? '${template.id}-${startedAt.microsecondsSinceEpoch}',
       agentId: template.id,
@@ -387,6 +433,10 @@ class AgentRunner {
       trace: List<TraceEntry>.unmodifiable(trace),
       output: output,
       error: error,
+      // Both recorded rather than read back off the template later: editing
+      // an agent must not change what its finished runs say they did.
+      view: template.answer.isStructured ? (view ?? '') : null,
+      summaryLine: summariseStructured(view, output),
     );
   }
 
@@ -403,7 +453,6 @@ class AgentRunner {
     );
   }
 
-  /// The first line of [text], short enough for a trace row.
   static String _summarise(String text) {
     final first = text.trim().split('\n').first.trim();
     if (first.isEmpty) return 'Think';

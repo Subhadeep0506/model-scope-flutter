@@ -395,16 +395,18 @@ void main() {
   group('a skipped tool', () {
     /// Reports a call on the [n]th ask and none before it, which is how a
     /// model that has to be told twice is scripted.
-    Map<int, List<ToolInvocation>> callsOnAsk(int n) =>
-        <int, List<ToolInvocation>>{
-          n: <ToolInvocation>[
-            const ToolInvocation(
-              name: 'web_search',
-              arguments: '"dart records"',
-              result: 'Results for dart records',
-            ),
-          ],
-        };
+    Map<int, List<ToolInvocation>> callsOnAsk(
+      int n, {
+      String result = 'Results for dart records',
+    }) => <int, List<ToolInvocation>>{
+      n: <ToolInvocation>[
+        ToolInvocation(
+          name: 'web_search',
+          arguments: '"dart records"',
+          result: result,
+        ),
+      ],
+    };
 
     test('is asked again, and the second answer is kept', () async {
       final llm = FakeLlmService()..loadedForTest();
@@ -491,6 +493,41 @@ void main() {
 
       // Otherwise step two is handed a blank and has nothing to reason about.
       check(llm.prompts[1]).contains('Results for dart records');
+    });
+
+    test('the tool result survives the model talking over it', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedToolCalls = callsOnAsk(0);
+      llm.scriptedReplies = <List<String>>[
+        // What a small model says after a successful call: contentless.
+        <String>['I have ', 'searched for that.'],
+        <String>['the points'],
+        <String>['done'],
+      ];
+
+      await runOf(runnerOver(llm, toolRetries: 1), templateOf());
+
+      // The results used to be dropped the moment the model added a sentence,
+      // so whether the pipeline had anything to work from came down to a
+      // sampling decision — the same agent could work on one run and not the
+      // next. Both are kept now.
+      check(llm.prompts[1]).contains('Results for dart records');
+      check(llm.prompts[1]).contains('I have searched for that.');
+    });
+
+    test('a tool that returned nothing still passes the reply on', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedToolCalls = callsOnAsk(0, result: '');
+      llm.scriptedReplies = <List<String>>[
+        <String>['nothing came back'],
+        <String>['the points'],
+        <String>['done'],
+      ];
+
+      await runOf(runnerOver(llm, toolRetries: 1), templateOf());
+
+      // An empty result must not blank out what the model made of it.
+      check(llm.prompts[1]).contains('nothing came back');
     });
   });
 
@@ -586,6 +623,143 @@ void main() {
       check(logs).length.equals(1);
       check(logs.single.text).contains('No model installed');
       check(logs.single.isError).isTrue();
+    });
+  });
+
+  group('a structured answer', () {
+    const Map<String, dynamic> schema = <String, dynamic>{
+      'type': 'object',
+      'properties': <String, dynamic>{
+        'winner': <String, dynamic>{'type': 'string'},
+      },
+      'required': <String>['winner'],
+    };
+
+    AgentTemplate structured({String? view = 'price_table'}) => templateOf(
+      answer: AnswerStep(
+        prompt: 'Return the winner.',
+        reads: const <String>['step.search'],
+        schema: schema,
+        view: view,
+      ),
+    );
+
+    test('constrains the answer, then lifts the constraint', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedReplies = <List<String>>[
+        <String>['found'],
+        <String>['the points'],
+        <String>['{"winner": "C"}'],
+      ];
+
+      await runOf(runnerOver(llm), structured());
+
+      // Applied before the ask and lifted after it. Leaving it on would force
+      // the next unrelated reply — a later run, or Chat — into this shape.
+      check(llm.schemas).length.equals(2);
+      check(llm.schemas.first).isNotNull();
+      check(llm.schemas.last).isNull();
+    });
+
+    test('lifts the constraint even when the answer throws', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      // Ask 2 is the answer step: two pipeline steps come first.
+      llm.askFailure = (ask) =>
+          ask == 2 ? StateError('the context is full') : null;
+
+      await runOf(runnerOver(llm), structured());
+
+      check(llm.schemas.last).isNull();
+    });
+
+    test('an answer step that fails is still recorded', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.askFailure = (ask) =>
+          ask == 2 ? StateError('the context is full') : null;
+
+      final events = await runOf(runnerOver(llm), templateOf());
+      final run = events.whereType<RunFinished>().single.run;
+
+      // It used to take the whole stream down instead: `yield*` forwards an
+      // error past the catch in `run`, so a failing answer produced no record
+      // at all while a failing pipeline step produced one.
+      check(run.error).isNotNull().contains('context is full');
+      check(run.trace.last.ok).isFalse();
+    });
+
+    test('an unconstrained agent is never handed a schema', () async {
+      final llm = FakeLlmService()..loadedForTest();
+
+      await runOf(runnerOver(llm), templateOf());
+
+      check(llm.schemas).isEmpty();
+    });
+
+    test('a refused schema answers anyway, and says so', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.schemaFailure = StateError('llguidance would not compile that');
+      llm.scriptedReplies = <List<String>>[
+        <String>['found'],
+        <String>['the points'],
+        <String>['C wins'],
+      ];
+
+      final events = await runOf(runnerOver(llm), structured());
+      final run = events.whereType<RunFinished>().single.run;
+
+      // The shape is lost, the run is not: an agent that cannot answer at all
+      // is worse than one that answers as prose.
+      check(run.error).isNull();
+      check(run.output).equals('C wins');
+      final complaints = <AgentLogEntry>[
+        for (final event in events.whereType<LogAdded>())
+          if (event.entry.text.contains('would not take')) event.entry,
+      ];
+      check(complaints).isNotEmpty();
+    });
+
+    test('the record carries the view and a summary line', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedReplies = <List<String>>[
+        <String>['found'],
+        <String>['the points'],
+        <String>['{"cheapest_retailer": "C", "offers": [{"retailer": "C"}]}'],
+      ];
+
+      final events = await runOf(runnerOver(llm), structured());
+      final run = events.whereType<RunFinished>().single.run;
+
+      // Stored rather than read back off the template, so editing the agent
+      // cannot change how a finished run draws or what it says it did.
+      check(run.view).equals('price_table');
+      check(run.summaryLine).equals('Cheapest: C · 1 offer');
+      check(run.summary).equals('Cheapest: C · 1 offer');
+    });
+
+    test('a structured agent naming no view still records one', () async {
+      final llm = FakeLlmService()..loadedForTest();
+      llm.scriptedReplies = <List<String>>[
+        <String>['found'],
+        <String>['the points'],
+        <String>['{"winner": "C"}'],
+      ];
+
+      final events = await runOf(runnerOver(llm), structured(view: null));
+      final run = events.whereType<RunFinished>().single.run;
+
+      // Empty, not null: null means "this run was prose", and the run screen
+      // reads the two differently.
+      check(run.view).equals('');
+    });
+
+    test('a prose run records no view and no summary line', () async {
+      final llm = FakeLlmService()..loadedForTest();
+
+      final events = await runOf(runnerOver(llm), templateOf());
+      final run = events.whereType<RunFinished>().single.run;
+
+      check(run.view).isNull();
+      check(run.summaryLine).isNull();
     });
   });
 }

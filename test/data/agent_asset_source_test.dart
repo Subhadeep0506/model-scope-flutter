@@ -15,6 +15,7 @@ import 'package:model_scope_flutter/domain/services/tavily_web_search_service.da
 import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
 import 'package:model_scope_flutter/domain/tools/document_tools.dart';
 import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
+import 'package:model_scope_flutter/presentation/widgets/structured/structured_view.dart';
 
 import '../support/fakes.dart';
 
@@ -121,6 +122,51 @@ void main() {
       check(template.purpose, because: template.id).isNotEmpty();
       check(template.systemPrompt, because: template.id).isNotEmpty();
       check(template.pipeline, because: template.id).isNotEmpty();
+    }
+  });
+
+  test('every shipped schema is one a sampler could be built from', () async {
+    final templates = await AgentAssetSource().load();
+    final structured = templates.where((t) => t.answer.isStructured);
+
+    check(structured, because: 'two agents ship a schema').isNotEmpty();
+    for (final template in structured) {
+      final schema = template.answer.schema ?? const <String, dynamic>{};
+
+      // llguidance compiles this at run time on the phone, where a mistake
+      // costs a run. The shape is cheap to check here.
+      check(schema['type'], because: template.id).equals('object');
+      check(
+        schema['properties'],
+        because: '${template.id} must declare properties',
+      ).isA<Map<String, dynamic>>().isNotEmpty();
+      check(
+        schema['required'],
+        because: '${template.id} must require something',
+      ).isA<List<dynamic>>().isNotEmpty();
+
+      // Every required field has to be one the schema actually declares, or
+      // the model is forced to emit a key nothing describes.
+      final properties = schema['properties'] as Map<String, dynamic>;
+      for (final name in schema['required'] as List<dynamic>) {
+        check(
+          properties.containsKey(name),
+          because: '${template.id} requires "$name", which it does not define',
+        ).isTrue();
+      }
+    }
+  });
+
+  test('a shipped agent names a component this build has', () async {
+    final templates = await AgentAssetSource().load();
+
+    for (final template in templates.where((t) => t.answer.isStructured)) {
+      // A user-written agent naming an unknown view falls back to a table on
+      // purpose. One of ours doing it is a typo.
+      check(
+        isKnownView(template.answer.view),
+        because: '${template.id} names "${template.answer.view}"',
+      ).isTrue();
     }
   });
 

@@ -12,22 +12,11 @@ class TavilyWebSearchService {
   });
 
   final TavilyApiClient _client;
-
-  /// Returns the stored Tavily key, or an empty string when none is set.
   final Future<String> Function() _apiKey;
-
-  /// How many hits a search asks for. Five is a deliberate ceiling: these go
-  /// into the context of a model with a few thousand tokens to spend, and ten
-  /// snippets would crowd out the conversation they are meant to inform.
   final int maxResults;
-
-  /// `basic` at one credit, or `advanced` at two for deeper extraction.
   final String searchDepth;
-
   static const String _logName = 'TavilyWebSearchService';
 
-  /// Whether a search can be run at all. Lets a caller grey out a control
-  /// rather than offer one that is certain to fail.
   Future<bool> get isConfigured async => (await _apiKey()).isNotEmpty;
 
   Future<WebSearchResult> search(

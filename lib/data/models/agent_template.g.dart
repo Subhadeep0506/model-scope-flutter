@@ -63,6 +63,8 @@ AnswerStep _$AnswerStepFromJson(Map<String, dynamic> json) => AnswerStep(
   reads:
       (json['reads'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
   model: json['model'] as String?,
+  schema: json['schema'] as Map<String, dynamic>?,
+  view: json['view'] as String?,
 );
 
 Map<String, dynamic> _$AnswerStepToJson(AnswerStep instance) =>
@@ -70,6 +72,8 @@ Map<String, dynamic> _$AnswerStepToJson(AnswerStep instance) =>
       'prompt': instance.prompt,
       'reads': instance.reads,
       'model': instance.model,
+      'schema': instance.schema,
+      'view': instance.view,
     };
 
 AgentTemplate _$AgentTemplateFromJson(Map<String, dynamic> json) =>

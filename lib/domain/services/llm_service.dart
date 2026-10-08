@@ -133,6 +133,18 @@ abstract interface class LlmService {
   /// Pushes new sampling settings onto the loaded model without reloading it.
   Future<void> applySettings(SamplerSettings settings);
 
+  /// Constrains the next replies to [schema], a JSON Schema, or lifts the
+  /// constraint when it is null.
+  ///
+  /// Forcing the shape rather than asking for it in the prompt is the whole
+  /// reason structured answers are worth attempting on a phone-sized model: a
+  /// 350M model will not reliably emit valid JSON because it was told to, but
+  /// it cannot emit anything else when the sampler will not let it.
+  ///
+  /// Throws when the backend will not compile the schema. A caller that can
+  /// carry on without the constraint should catch it — see `AgentRunner`.
+  Future<void> setResponseSchema(Map<String, dynamic>? schema);
+
   /// Turns the model's reasoning block on or off.
   ///
   /// Only works where the chat template reads `enable_thinking`; on a template

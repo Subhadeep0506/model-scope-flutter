@@ -238,6 +238,10 @@ class _Body extends ConsumerWidget {
             isStreaming: state.isRunning,
             isThinking: state.isThinking,
             error: state.viewing?.error ?? state.error,
+            // A past run carries its own, recorded when it finished, so
+            // editing the agent since cannot change how its history draws.
+            isStructured: state.showsStructured,
+            view: state.visibleView,
           ),
         ],
         if (!state.showsRun && state.history.isNotEmpty) ...<Widget>[

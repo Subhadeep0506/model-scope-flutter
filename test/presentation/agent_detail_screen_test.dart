@@ -182,6 +182,51 @@ void main() {
     check(find.text('Run again').evaluate()).isNotEmpty();
   });
 
+  testWidgets('a past structured run redraws as its component', (tester) async {
+    await pumpDetail(
+      tester,
+      runs: <AgentRun>[
+        fakeAgentRun(
+          agentId: 'test_agent',
+          output:
+              '{"offers": [{"retailer": "Retailer C", "price": 25750}], '
+              '"currency": "₹", "cheapest_retailer": "Retailer C"}',
+          view: 'price_table',
+          summaryLine: 'Cheapest: Retailer C · 1 offer',
+        ),
+      ],
+    );
+
+    // The history card prints the recorded line, not `{`.
+    check(find.text('Cheapest: Retailer C · 1 offer').evaluate()).isNotEmpty();
+
+    await tester.tap(find.text('Cheapest: Retailer C · 1 offer'));
+    await tester.pumpAndSettle();
+
+    // Drawn from what the run recorded, so editing the agent since — or
+    // removing its schema entirely — cannot change how its history reads.
+    check(find.text('Retailer C').evaluate()).isNotEmpty();
+    check(find.text('₹ 25,750').evaluate()).isNotEmpty();
+  });
+
+  testWidgets('a past prose run is not forced through a component', (
+    tester,
+  ) async {
+    await pumpDetail(
+      tester,
+      runs: <AgentRun>[
+        fakeAgentRun(agentId: 'test_agent', output: 'what it said then'),
+      ],
+    );
+
+    await tester.tap(find.text('what it said then'));
+    await tester.pumpAndSettle();
+
+    // No view recorded means it ran before the agent had a schema.
+    check(find.textContaining('what it said then').evaluate()).isNotEmpty();
+    check(find.text('{ }').evaluate()).isEmpty();
+  });
+
   testWidgets('Run again returns to the configuration', (tester) async {
     await pumpDetail(
       tester,

@@ -23,6 +23,12 @@ class NobodyWhoLlmService implements LlmService {
   String? _loadedModelId;
   String? _loadedProjectorPath;
 
+  /// The settings the sampler is built from, kept so a response schema can be
+  /// lifted again. A constrained sampler replaces the chain wholesale rather
+  /// than adding a step to it, so there is nothing to restore from unless the
+  /// settings that built it were held on to.
+  SamplerSettings? _settings;
+
   @override
   bool get isLoaded => _chat != null;
 
@@ -44,14 +50,12 @@ class NobodyWhoLlmService implements LlmService {
       throw ModelMissingException(name: model.name, path: model.localPath);
     }
 
-    // A projector that has gone missing costs the model its sight, not its
-    // ability to answer — so it is dropped with a line in the log rather than
-    // failing a load the weights are perfectly capable of.
     final projector = await _usableProjector(projectorPath);
 
     _chat = null;
     _loadedModelId = null;
     _loadedProjectorPath = null;
+    _settings = settings;
     try {
       _chat = await nobodywho.Chat.fromPath(
         modelPath: model.localPath,
@@ -83,7 +87,6 @@ class NobodyWhoLlmService implements LlmService {
     );
   }
 
-  /// [path] when there is a file at it, otherwise null.
   static Future<String?> _usableProjector(String? path) async {
     if (path == null) return null;
     if (await File(path).exists()) return path;
@@ -91,8 +94,6 @@ class NobodyWhoLlmService implements LlmService {
     return null;
   }
 
-  /// The file's length, or null when it cannot be read — this runs while an
-  /// error is already being built, so it must not raise one of its own.
   static Future<int?> _lengthOf(File file) async {
     try {
       return await file.length();
@@ -103,10 +104,36 @@ class NobodyWhoLlmService implements LlmService {
 
   @override
   Future<void> applySettings(SamplerSettings settings) async {
+    _settings = settings;
     final chat = _chat;
     if (chat == null) return;
     await chat.setSamplerConfig(_samplerFrom(settings));
     await chat.setSystemPrompt(settings.systemPrompt);
+  }
+
+  @override
+  Future<void> setResponseSchema(Map<String, dynamic>? schema) async {
+    final chat = _chat;
+    if (chat == null) return;
+
+    if (schema == null) {
+      // Back to the chain the settings describe. The constrained sampler is a
+      // whole config rather than a step, so lifting it means rebuilding.
+      final settings = _settings;
+      if (settings != null) await chat.setSamplerConfig(_samplerFrom(settings));
+      return;
+    }
+
+    // Throws when llguidance will not compile the schema, which the caller
+    // handles — an agent falls back to an unconstrained answer rather than
+    // losing the run.
+    await chat.setSamplerConfig(
+      nobodywho.SamplerPresets.constrainWithJsonSchema(schema: schema),
+    );
+    developer.log(
+      'Constrained the next reply to a ${schema.length}-key schema',
+      name: _logName,
+    );
   }
 
   @override
@@ -158,14 +185,6 @@ class NobodyWhoLlmService implements LlmService {
     return _pairCalls(await chat.getChatHistory());
   }
 
-  /// Walks the history pairing each call the model asked for with the result
-  /// that answered it.
-  ///
-  /// The two live in separate messages — an assistant message carries the
-  /// calls, and one tool message follows per call — so they are matched by
-  /// order rather than by any id, which the format does not carry. A call left
-  /// unanswered still appears, with an empty result: a tool the loop never got
-  /// round to running is worth seeing in the trace.
   static List<ToolInvocation> _pairCalls(List<nobodywho.Message> history) {
     final calls = <nobodywho.ToolCall>[];
     final results = <String>[];
@@ -192,9 +211,6 @@ class NobodyWhoLlmService implements LlmService {
     ];
   }
 
-  /// Flattens the arguments to the one line a trace row has space for.
-  /// `{"query": "sony wh-1000xm5"}` reads as `"sony wh-1000xm5"`, because a
-  /// tool here takes one argument and its name is already on the row.
   static String _describeArguments(Object? arguments) {
     final decoded = switch (arguments) {
       final String text when text.trim().startsWith('{') => _tryDecode(text),
@@ -245,6 +261,7 @@ class NobodyWhoLlmService implements LlmService {
     _chat = null;
     _loadedModelId = null;
     _loadedProjectorPath = null;
+    _settings = null;
   }
 
   /// Maps the app's settings onto a `nobodywho` sampler chain. `maxTokens` has

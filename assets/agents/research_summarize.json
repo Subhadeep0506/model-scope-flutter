@@ -5,7 +5,7 @@
   "purpose": "Multi-source brief with citations",
   "description": "Searches the web on a topic, reads the most promising page in full, pulls out the points that matter, then writes a short brief with its sources named. Tests whether a model can carry a finding from one step into the next.",
   "icon": "microscope",
-  "system_prompt": "You are a careful research assistant. Work only from what the tools return. Name the source of every claim, and say plainly when the material does not settle a question.",
+  "system_prompt": "You are a careful research assistant. Work only from the material you are given - never from memory. Name the source of every claim, and say plainly when the material does not settle a question.",
   "inputs": [
     {
       "name": "topic",

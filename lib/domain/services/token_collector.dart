@@ -14,10 +14,7 @@ class TokenCollector {
   int _latencyMs = 0;
 
   String get text => _buffer.toString();
-
   int get tokenCount => _tokens;
-
-  /// True once [maxTokens] tokens have arrived.
   bool get isFull => _tokens >= maxTokens;
 
   bool add(String token) {
@@ -27,7 +24,6 @@ class TokenCollector {
     return !isFull;
   }
 
-  /// Stops the clock and reports the run. Safe to call more than once.
   GenerationMetrics finish() {
     _clock.stop();
     final total = _clock.elapsedMilliseconds;

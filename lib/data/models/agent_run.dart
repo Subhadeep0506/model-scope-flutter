@@ -84,6 +84,8 @@ class AgentRun {
     this.trace = const <TraceEntry>[],
     this.output = '',
     this.error,
+    this.view,
+    this.summaryLine,
   });
 
   factory AgentRun.fromJson(Map<String, dynamic> json) =>
@@ -113,18 +115,35 @@ class AgentRun {
   /// Why the run stopped early, or null when it finished.
   final String? error;
 
+  /// Which component drew this run's output, when it was a structured one.
+  ///
+  /// Stored rather than read back off the template, for the same reason
+  /// [agentName] is: editing an agent must not make its old runs redraw as
+  /// something else, or stop drawing at all.
+  final String? view;
+
+  /// The one line RUN HISTORY prints, written when the run finished.
+  ///
+  /// Only set for a structured run, where [output] is JSON and taking its
+  /// first line would print `{`. Null on a prose run, which falls back to
+  /// the first line as before.
+  final String? summaryLine;
+
   bool get succeeded => error == null;
 
-  /// The first line of the output, which is what the history card shows as its
-  /// title. Falls back to the error, so a failed run is not a blank row.
+  /// What the history card shows as its title. Falls back to the error, so a
+  /// failed run is not a blank row.
   String get summary {
     final failure = error;
     if (failure != null) return failure;
 
-    final first = output
-        .split('\n')
-        .map((line) => line.trim())
-        .firstWhere((line) => line.isNotEmpty, orElse: () => 'No output');
+    final written = summaryLine?.trim() ?? '';
+    final first = written.isNotEmpty
+        ? written
+        : output
+              .split('\n')
+              .map((line) => line.trim())
+              .firstWhere((line) => line.isNotEmpty, orElse: () => 'No output');
     return first.length <= 72 ? first : '${first.substring(0, 71)}…';
   }
 

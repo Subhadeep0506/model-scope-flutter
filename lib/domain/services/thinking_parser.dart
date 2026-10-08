@@ -3,9 +3,6 @@ typedef ThoughtSplit = ({String thinking, String answer, bool isOpen});
 const String _openTag = '<think>';
 const String _closeTag = '</think>';
 
-/// Separates a reasoning model's `<think>` block from its answer. Four shapes
-/// are handled, because models differ in what they emit: no tags, both tags,
-/// an open with no close (still streaming), and a close with no open.
 ThoughtSplit splitThinking(String raw) {
   final openAt = raw.indexOf(_openTag);
   final closeAt = raw.indexOf(_closeTag);

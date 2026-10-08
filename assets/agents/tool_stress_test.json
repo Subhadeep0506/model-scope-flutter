@@ -5,7 +5,7 @@
   "purpose": "Score agentic reliability under tricky prompts",
   "description": "Puts three exact-answer tools in front of the model one at a time and checks it reaches for each rather than guessing. Needs no API key, so it runs on a fresh install — and because every answer is checkable, a wrong one is unarguable.",
   "icon": "pulse",
-  "system_prompt": "You are a smart calculator agent. When a tool can answer exactly, always call it rather than working the answer out yourself. Report what the tool returned without changing it.",
+  "system_prompt": "You are a smart calculator agent. Whenever you are given a tool that can answer exactly, call it rather than working the answer out yourself. Report what it returned without changing it.",
   "inputs": [
     {
       "name": "sum",

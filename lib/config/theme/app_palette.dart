@@ -18,6 +18,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.selectedTile,
     required this.danger,
     required this.warning,
+    required this.chartSeries,
   });
 
   /// Page background behind every scaffold.
@@ -65,6 +66,19 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// Cautions that are not failures: a quant large enough to strain the device.
   final Color warning;
 
+  /// One colour per line on a multi-series chart, in the order lines are
+  /// drawn. Five, because the agents that chart anything cap themselves at
+  /// five rows; a sixth series wraps round to the first.
+  ///
+  /// The last two reuse the warning and danger hues on purpose — a chart that
+  /// introduced colours found nowhere else in the app would read as belonging
+  /// to a different one.
+  final List<Color> chartSeries;
+
+  /// The colour for series [index], wrapping when there are more lines than
+  /// colours.
+  Color seriesAt(int index) => chartSeries[index % chartSeries.length];
+
   /// Sampled from the mockups: the sheets darken the page to exactly 80% black.
   static const Color scrim = Color(0xCC000000);
 
@@ -84,6 +98,13 @@ class AppPalette extends ThemeExtension<AppPalette> {
     selectedTile: Color(0xFFDEEEE4),
     danger: Color(0xFFA33328),
     warning: Color(0xFFB26B00),
+    chartSeries: <Color>[
+      Color(0xFF00722E),
+      Color(0xFF1565A8),
+      Color(0xFF6A3FA0),
+      Color(0xFFB26B00),
+      Color(0xFFA33328),
+    ],
   );
 
   static const AppPalette dark = AppPalette(
@@ -102,6 +123,13 @@ class AppPalette extends ThemeExtension<AppPalette> {
     selectedTile: Color(0xFF1E3227),
     danger: Color(0xFFE79289),
     warning: Color(0xFFE0A33C),
+    chartSeries: <Color>[
+      Color(0xFF3DBE6E),
+      Color(0xFF56A8E8),
+      Color(0xFFB08BE0),
+      Color(0xFFE0A33C),
+      Color(0xFFE79289),
+    ],
   );
 
   @override
@@ -121,6 +149,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? selectedTile,
     Color? danger,
     Color? warning,
+    List<Color>? chartSeries,
   }) {
     return AppPalette(
       canvas: canvas ?? this.canvas,
@@ -138,6 +167,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       selectedTile: selectedTile ?? this.selectedTile,
       danger: danger ?? this.danger,
       warning: warning ?? this.warning,
+      chartSeries: chartSeries ?? this.chartSeries,
     );
   }
 
@@ -162,6 +192,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
           Color.lerp(selectedTile, other.selectedTile, t) ?? selectedTile,
       danger: Color.lerp(danger, other.danger, t) ?? danger,
       warning: Color.lerp(warning, other.warning, t) ?? warning,
+      chartSeries: <Color>[
+        for (final (index, colour) in chartSeries.indexed)
+          Color.lerp(colour, other.seriesAt(index), t) ?? colour,
+      ],
     );
   }
 }

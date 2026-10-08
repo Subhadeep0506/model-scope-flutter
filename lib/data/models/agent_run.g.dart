@@ -42,6 +42,8 @@ AgentRun _$AgentRunFromJson(Map<String, dynamic> json) => AgentRun(
       [],
   output: json['output'] as String? ?? '',
   error: json['error'] as String?,
+  view: json['view'] as String?,
+  summaryLine: json['summary_line'] as String?,
 );
 
 Map<String, dynamic> _$AgentRunToJson(AgentRun instance) => <String, dynamic>{
@@ -54,4 +56,6 @@ Map<String, dynamic> _$AgentRunToJson(AgentRun instance) => <String, dynamic>{
   'trace': instance.trace.map((e) => e.toJson()).toList(),
   'output': instance.output,
   'error': instance.error,
+  'view': instance.view,
+  'summary_line': instance.summaryLine,
 };

@@ -5,7 +5,7 @@
   "purpose": "Compare the weather across several places",
   "description": "Fetches current conditions and a three-day forecast for every place you name, then writes one report comparing them. Needs no API key. Tests whether a model can pass a list through a tool unchanged and then reason across the rows it gets back rather than from memory.",
   "icon": "weather",
-  "system_prompt": "You are a precise weather reporter. Use only the figures the tool returned - never estimate a temperature and never recall one from training. Every place you mention must appear in the tool output. When a place could not be found, say so plainly instead of guessing.",
+  "system_prompt": "You are a precise weather reporter. Use only the figures in the material you are given - never estimate a temperature and never recall one from training. Every place you mention must appear in that material. When a place could not be found, say so plainly instead of guessing.",
   "inputs": [
     {
       "name": "locations",
@@ -18,7 +18,10 @@
       "name": "units",
       "label": "Units",
       "type": "choice",
-      "options": ["metric", "imperial"],
+      "options": [
+        "metric",
+        "imperial"
+      ],
       "default": "metric",
       "required": true
     },
@@ -41,12 +44,102 @@
     {
       "id": "compare",
       "kind": "reason",
-      "reads": ["step.fetch"],
+      "reads": [
+        "step.fetch"
+      ],
       "prompt": "List each place on its own line as: place -> conditions now -> today's range -> rain outlook. Copy the figures across exactly as given, including their units. Write 'NA' for anything missing, and do not add a place the material does not name."
     }
   ],
   "answer": {
-    "prompt": "Write a short weather report of about 120 words covering every place above, with an eye on {{input.focus}}. Say which is warmest and which is coldest right now, and name any place expecting rain in the next three days. Keep the figures and their units exactly as given. If a place could not be found, say so in one sentence at the end.",
-    "reads": ["step.compare", "step.fetch"]
+    "prompt": "Return the weather for every place in the material above. Copy each figure exactly as given - never estimate a temperature and never recall one. Set unit to the degree symbol the material used, such as degC or degF. Give one entry in places for each location, and one entry in forecast for each location on each of the next three days, with day written as the date the material gives. Name the hottest location right now as warmest and the coldest as coldest. List in rain_expected every location the material shows precipitation for in the next three days, and leave it empty if there are none. Do not add a place the material does not name.",
+    "reads": [
+      "step.compare",
+      "step.fetch"
+    ],
+    "view": "weather_forecast",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "type": "string"
+        },
+        "places": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "place": {
+                "type": "string"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "condition": {
+                "type": "string"
+              },
+              "humidity": {
+                "type": "number"
+              },
+              "wind": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "place",
+              "temperature",
+              "condition"
+            ]
+          }
+        },
+        "forecast": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "place": {
+                "type": "string"
+              },
+              "day": {
+                "type": "string"
+              },
+              "min_temp": {
+                "type": "number"
+              },
+              "max_temp": {
+                "type": "number"
+              },
+              "rain_chance": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "place",
+              "day",
+              "min_temp",
+              "max_temp"
+            ]
+          }
+        },
+        "warmest": {
+          "type": "string"
+        },
+        "coldest": {
+          "type": "string"
+        },
+        "rain_expected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "unit",
+        "places",
+        "forecast",
+        "warmest",
+        "coldest"
+      ]
+    }
   }
 }

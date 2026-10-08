@@ -108,6 +108,14 @@ class FakeLlmService implements LlmService {
   /// between steps.
   int resetCalls = 0;
 
+  /// Every schema handed to [setResponseSchema], nulls included, so a test can
+  /// prove a constraint was both applied and lifted again.
+  final List<Map<String, dynamic>?> schemas = <Map<String, dynamic>?>[];
+
+  /// Thrown by [setResponseSchema] when a schema is passed, standing in for
+  /// llguidance refusing to compile one.
+  Object? schemaFailure;
+
   /// Set to make the next [ask] fail, for the partial-trace path.
   Object? Function(int askNumber)? askFailure;
 
@@ -169,6 +177,15 @@ class FakeLlmService implements LlmService {
   @override
   Future<void> applySettings(SamplerSettings settings) async =>
       applied.add(settings);
+
+  @override
+  Future<void> setResponseSchema(Map<String, dynamic>? schema) async {
+    final refusal = schemaFailure;
+    // Only applying one can fail; lifting a constraint has to work, or the
+    // chat would be left constrained for every later turn.
+    if (refusal != null && schema != null) throw refusal;
+    schemas.add(schema);
+  }
 
   @override
   Future<void> setSystemPrompt(String prompt) async =>
@@ -1101,6 +1118,8 @@ AgentRun fakeAgentRun({
   List<TraceEntry>? trace,
   String output = 'Dart records are tuples with named fields.',
   String? error,
+  String? view,
+  String? summaryLine,
 }) => AgentRun(
   id: id,
   agentId: agentId,
@@ -1108,6 +1127,8 @@ AgentRun fakeAgentRun({
   modelId: modelId,
   startedAt: startedAt ?? DateTime(2026, 10, 6, 9),
   durationMs: durationMs,
+  view: view,
+  summaryLine: summaryLine,
   trace:
       trace ??
       const <TraceEntry>[

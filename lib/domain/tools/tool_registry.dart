@@ -31,8 +31,6 @@ class ToolRegistry {
   }) => ToolRegistry(
     tools: <ToolDefinition>[
       ...webTools(search: search, crawler: crawler),
-      // No readiness entry and no blocker: Open-Meteo needs no key, so this
-      // one can never be gated on Settings.
       weatherTool(weather),
       searchDocumentTool(
         index: documents,
@@ -46,9 +44,6 @@ class ToolRegistry {
     readiness: <String, Future<bool> Function()>{
       'web_search': () => search.isConfigured,
       'read_web_page': () => crawler.isConfigured,
-      // Gated on the model, not on the index: the document is picked as an
-      // input on the run screen, so an empty index before a run is the
-      // ordinary state rather than a problem to report.
       'search_document': hasEmbeddingModel,
     },
     blockers: const <String, ToolBlocker>{

@@ -3,27 +3,12 @@ import 'dart:developer' as developer;
 import '../../data/models/weather_report.dart';
 import '../../data/sources/open_meteo_api_client.dart';
 
-/// Weather for several places at once.
-///
-/// Unlike the web services beside it there is no key to read: Open-Meteo is
-/// open, so this is always configured and the tool is never blocked.
 class OpenMeteoWeatherService {
   const OpenMeteoWeatherService(this._client, {this.maxLocations = 5});
-
   final OpenMeteoApiClient _client;
-
-  /// How many places one report covers. Five is a deliberate ceiling: each
-  /// costs two requests and several lines of context, and a model with a few
-  /// thousand tokens to spend cannot usefully compare more than a handful.
   final int maxLocations;
-
   static const String _logName = 'OpenMeteoWeatherService';
 
-  /// Splits a comma-separated list into places, dropping blanks and repeats.
-  ///
-  /// `Paris, paris , Tokyo` is two places, not three: a small model asked for
-  /// several cities will sometimes list one twice, and fetching it twice would
-  /// spend a request to say the same thing again.
   List<String> parseLocations(String raw) {
     final seen = <String>{};
     final names = <String>[];
@@ -46,8 +31,6 @@ class OpenMeteoWeatherService {
       );
     }
 
-    // Concurrently: five places one after another is five round trips of
-    // latency on a phone, and they do not depend on each other.
     final found = await Future.wait(
       names.map((name) => _locate(name, metric: metric)),
     );
@@ -75,10 +58,6 @@ class OpenMeteoWeatherService {
     return WeatherReport(locations: locations, unresolved: unresolved);
   }
 
-  /// Geocode then forecast, or null when the name places nowhere.
-  ///
-  /// A failure on one place is swallowed to null rather than thrown: four
-  /// cities and one apology beats no report at all.
   Future<LocationWeather?> _locate(String name, {required bool metric}) async {
     try {
       final place = await _client.geocode(name);
