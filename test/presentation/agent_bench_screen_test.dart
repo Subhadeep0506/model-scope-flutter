@@ -191,4 +191,68 @@ void main() {
     check(find.text('Opened web_answer').evaluate()).isNotEmpty();
     check(router.state.matchedLocation).equals('/agent/web_answer');
   });
+
+  testWidgets('the New agent button opens the builder', (tester) async {
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+
+    // A stand-in at the builder path: this asserts where the bench sends the
+    // user, not what the builder renders.
+    final router = GoRouter(
+      initialLocation: Routes.agent,
+      routes: <RouteBase>[
+        GoRoute(
+          path: Routes.agent,
+          builder: (_, _) => const AgentBenchScreen(),
+          routes: <RouteBase>[
+            GoRoute(
+              path: 'new',
+              builder: (_, _) => const Scaffold(body: Text('The builder')),
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: fakeOverrides(
+          llm: FakeLlmService(),
+          sessions: FakeSessionRepository(),
+          agents: FakeAgentRepository(twoAgents()),
+        ),
+        child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('New agent'));
+    await tester.pumpAndSettle();
+
+    check(find.text('The builder').evaluate()).isNotEmpty();
+    check(router.state.matchedLocation).equals('/agent/new');
+  });
+
+  testWidgets('an agent the user built is listed under My agents', (
+    tester,
+  ) async {
+    await pumpBench(
+      tester,
+      agents: <Agent>[
+        Agent(
+          template: fakeAgentTemplate(id: 'mine', name: 'My Agent'),
+          isBuiltIn: false,
+        ),
+        ...twoAgents(),
+      ],
+    );
+
+    check(find.text('My agents').evaluate()).isNotEmpty();
+    check(find.text('My Agent').evaluate()).isNotEmpty();
+    // The empty state is gone now that there is something to list.
+    check(find.text('No custom agents yet — build one from tools').evaluate())
+        .isEmpty();
+  });
 }

@@ -15,6 +15,8 @@ import '../../data/sources/hf_api_client.dart';
 import '../../domain/services/home_stats_builder.dart';
 import '../../presentation/view_models/agent_bench_state.dart';
 import '../../presentation/view_models/agent_bench_view_model.dart';
+import '../../presentation/view_models/agent_builder_state.dart';
+import '../../presentation/view_models/agent_builder_view_model.dart';
 import '../../presentation/view_models/agent_run_state.dart';
 import '../../presentation/view_models/agent_run_view_model.dart';
 import '../../presentation/view_models/api_keys_state.dart';
@@ -104,6 +106,16 @@ final agentBenchViewModelProvider =
 
 final agentRunViewModelProvider =
     NotifierProvider<AgentRunViewModel, AgentRunState>(AgentRunViewModel.new);
+
+/// The agent being built or edited.
+///
+/// Not auto-disposed, so a half-filled form survives the keyboard pushing the
+/// screen around. `open` resets it, which is what stops the last agent's
+/// fields turning up in the next one.
+final agentBuilderViewModelProvider =
+    AsyncNotifierProvider<AgentBuilderViewModel, AgentDraft>(
+      AgentBuilderViewModel.new,
+    );
 
 final repoFilesProvider = FutureProvider.family<List<GgufFile>, String>(
   (ref, repoId) => ref.watch(huggingFaceRepositoryProvider).filesOf(repoId),

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../config/di/view_models.dart';
+import '../../config/router/app_router.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/agent_run.dart';
+import '../../data/repositories/agent_repository.dart';
 import '../view_models/agent_run_state.dart';
 import '../view_models/agent_run_view_model.dart';
 import '../widgets/agent_inputs_card.dart';
@@ -143,6 +145,7 @@ class _Header extends ConsumerWidget {
             ],
           ),
         ),
+        if (state.agent case final agent?) _Menu(agent: agent),
       ],
     );
   }
@@ -156,6 +159,36 @@ class _Header extends ConsumerWidget {
     }
     if (context.canPop()) context.pop();
   }
+}
+
+/// Where an agent is edited from.
+///
+/// A built-in offers only `Duplicate`: its file is in the bundle, where
+/// nothing on the device can change it. The copy is what gets edited — and is
+/// the quickest way to see how a shipped agent is put together, or to break
+/// one deliberately and watch what the model does.
+class _Menu extends StatelessWidget {
+  const _Menu({required this.agent});
+
+  final Agent agent;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    icon: Icon(Icons.more_vert_rounded, color: context.palette.muted),
+    tooltip: 'More',
+    onSelected: (value) => switch (value) {
+      'edit' => context.push(Routes.agentEditOf(agent.id)),
+      _ => context.push(Routes.agentCopyOf(agent.id)),
+    },
+    itemBuilder: (context) => <PopupMenuEntry<String>>[
+      if (!agent.isBuiltIn)
+        const PopupMenuItem<String>(value: 'edit', child: Text('Edit agent')),
+      const PopupMenuItem<String>(
+        value: 'copy',
+        child: Text('Duplicate as a new agent'),
+      ),
+    ],
+  );
 }
 
 class _Body extends ConsumerWidget {

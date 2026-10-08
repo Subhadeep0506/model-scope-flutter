@@ -31,6 +31,13 @@ class AgentBenchScreen extends ConsumerWidget {
           _ => _Bench(state: bench.value ?? AgentBenchState.empty),
         },
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push(Routes.agentNew),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New agent'),
+        backgroundColor: context.palette.primary,
+        foregroundColor: context.palette.onPrimary,
+      ),
     );
   }
 }
@@ -71,7 +78,8 @@ class _Bench extends StatelessWidget {
         ),
         _Block(
           top: metrics.gapMd,
-          bottom: metrics.gapXl,
+          // Room for the button floating over the end of the list.
+          bottom: metrics.gapXl * 3,
           child: state.builtIn.isEmpty
               ? const _Note(text: 'No agents are bundled with this build.')
               : _Cards(listings: state.builtIn, now: now),

@@ -7,6 +7,26 @@ import 'package:flutter/material.dart';
 /// is the one place those strings become glyphs, and an unknown one falls back
 /// to the robot rather than throwing: a template written for a later build
 /// should still draw.
+/// Every token [agentIconFor] draws something of its own for, in the order
+/// the builder's picker offers them.
+///
+/// Anything not on this list falls back to the robot, which is right for a
+/// file written against a later build but wrong to offer in a picker — there
+/// would be nothing on screen to say why the icon chosen was not the icon
+/// drawn.
+const List<String> agentIconTokens = <String>[
+  'search',
+  'microscope',
+  'tag',
+  'weather',
+  'document',
+  'braces',
+  'chat',
+  'pulse',
+  'bolt',
+  'robot',
+];
+
 IconData agentIconFor(String token) => switch (token) {
   'search' => Icons.search_rounded,
   'tag' => Icons.sell_outlined,

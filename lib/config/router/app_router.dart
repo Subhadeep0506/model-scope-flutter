@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../presentation/screens/agent_bench_screen.dart';
+import '../../presentation/screens/agent_builder_screen.dart';
 import '../../presentation/screens/agent_detail_screen.dart';
 import '../../presentation/screens/app_shell.dart';
 import '../../presentation/screens/chat_screen.dart';
@@ -25,8 +26,16 @@ abstract final class Routes {
   /// the mockups draw it.
   static const String agentDetail = '/agent/:id';
 
+  /// The pipeline builder, also inside the Agent branch. Both must be matched
+  /// before [agentDetail], or `/agent/new` reads as an agent called `new`.
+  static const String agentNew = '/agent/new';
+  static const String agentEdit = '/agent/edit/:id';
+  static const String agentCopy = '/agent/copy/:id';
+
   static String sessionOf(String id) => '/chat/session/$id';
   static String agentOf(String id) => '/agent/$id';
+  static String agentEditOf(String id) => '/agent/edit/$id';
+  static String agentCopyOf(String id) => '/agent/copy/$id';
 }
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -71,6 +80,22 @@ GoRouter createRouter() => GoRouter(
           Routes.agent,
           const AgentBenchScreen(),
           routes: <RouteBase>[
+            // Declared before `:id`: go_router matches in order, so these
+            // would otherwise be read as agents called `new`, `edit` and
+            // `copy`.
+            GoRoute(path: 'new', builder: (_, _) => const AgentBuilderScreen()),
+            GoRoute(
+              path: 'edit/:id',
+              builder: (_, state) =>
+                  AgentBuilderScreen(agentId: state.pathParameters['id']),
+            ),
+            GoRoute(
+              path: 'copy/:id',
+              builder: (_, state) => AgentBuilderScreen(
+                agentId: state.pathParameters['id'],
+                duplicate: true,
+              ),
+            ),
             GoRoute(
               path: ':id',
               builder: (_, state) =>

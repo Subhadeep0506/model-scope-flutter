@@ -380,6 +380,10 @@ class FakeAgentRepository implements AgentRepository {
   final List<AgentTemplate> saved = <AgentTemplate>[];
   final List<String> deleted = <String>[];
 
+  /// Makes [save] report a refusal, standing in for a disk that will not take
+  /// the file.
+  bool writeFails = false;
+
   @override
   Future<List<Agent>> load() async => stored;
 
@@ -393,7 +397,14 @@ class FakeAgentRepository implements AgentRepository {
 
   @override
   Future<bool> save(AgentTemplate template) async {
+    if (writeFails) return false;
     saved.add(template);
+    // Readable again afterwards, so a test can save and then reopen.
+    stored = <Agent>[
+      for (final agent in stored)
+        if (agent.id != template.id) agent,
+      Agent(template: template, isBuiltIn: false),
+    ];
     return true;
   }
 

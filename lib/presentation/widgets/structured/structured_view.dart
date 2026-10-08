@@ -26,8 +26,28 @@ StructuredView viewFor(String? name) => switch (name) {
   _ => const GenericDataView(),
 };
 
+/// One component an agent can name, for the builder's `DRAWN AS` picker.
+class NamedView {
+  const NamedView(this.name, this.label);
+
+  /// What the template writes.
+  final String name;
+
+  /// What the picker shows.
+  final String label;
+}
+
+/// Every component this build has, in the order the picker lists them.
+///
+/// An agent may name something not on this list — one written against a later
+/// build, or a typo — and [viewFor] falls back to the generic table rather
+/// than failing.
+const List<NamedView> knownViews = <NamedView>[
+  NamedView('price_table', 'Offers table'),
+  NamedView('weather_forecast', 'Weather table and chart'),
+];
+
 /// Whether [name] has a component written for it, as opposed to falling back.
-/// Only the shipped-template test cares, so a typo in a built-in agent's view
-/// name is caught before the phone is.
-bool isKnownView(String? name) =>
-    name == 'price_table' || name == 'weather_forecast';
+/// The builder greys out an unknown one, and the shipped-template test uses
+/// this to catch a typo in a built-in agent before the phone does.
+bool isKnownView(String? name) => knownViews.any((view) => view.name == name);

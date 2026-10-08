@@ -24,7 +24,7 @@ Run these from the project root (`model_scope_flutter/`).
 [app_cache_service.dart:18](lib/domain/services/app_cache_service.dart#L18). That
 one is deliberate and known. If you ever see **2** issues, your change caused it.
 
-**`flutter test` should say `736 passed`.** If the number drops, you broke
+**`flutter test` should say `806 passed`.** If the number drops, you broke
 something. If it rises, you added a test — good.
 
 There is nothing to run locally on this machine. The only way to see the app
@@ -342,12 +342,25 @@ which is what lets `flutter test` call a tool directly.
 ### Adding an agent
 
 An **agent** is a saved recipe: a list of steps the app walks in order, each
-one asking the model to do a single thing. It is a JSON file and nothing else —
-drop one in [assets/agents/](assets/agents/) and it appears on the Agent tab.
-The app finds it by listing the directory, so there is no index to update.
+one asking the model to do a single thing. It is a JSON file and nothing else.
 
-A file looks like this ([web_answer.json](assets/agents/web_answer.json) is the
-shortest real one):
+**There are two ways to make one, and the ordinary one is on the phone.** Agent
+tab → `+ New agent` opens the pipeline builder, which writes a file into the
+app's documents directory. A built-in can be duplicated from its own screen
+(⋮ → `Duplicate as a new agent`) and then edited, which is the quickest way to
+see how a shipped agent is put together — or to break one on purpose and watch
+what the model does. The builder's ⋮ also has `Edit as JSON`, which hands you
+the whole file for anything the form draws no control for.
+
+**The other way is to ship one**: drop a file in
+[assets/agents/](assets/agents/) and it appears under `Built-in`. The app finds
+it by listing the directory, so there is no index to update. A built-in cannot
+be edited or deleted on the device — its file is in the bundle. (A *custom*
+agent whose `id` matches a built-in replaces it, which is how an override
+works if you ever want one.)
+
+Both routes produce the same shape of file. A file looks like this
+([web_answer.json](assets/agents/web_answer.json) is the shortest real one):
 
 ```jsonc
 {
@@ -388,6 +401,36 @@ ways, and both accept `input.<name>` (what the user typed) or `step.<id>`
 
 A step can only read something that comes **before** it. Reading a later step
 is caught before the agent runs.
+
+### How the builder is put together
+
+Worth knowing before changing it, because the shape is not obvious:
+
+- **The builder edits a draft, not a template.** `AgentTemplate` is immutable
+  and cannot hold a half-typed name or a step with no tool picked yet, so
+  [agent_builder_state.dart](lib/presentation/view_models/agent_builder_state.dart)
+  mirrors it with mutable `AgentDraft` / `DraftInput` / `DraftStep` classes.
+  Each row carries a `key` the file never sees, so deleting row two does not
+  make Flutter think row three's text field is now row two's.
+- **The draft is mutated in place**, which means Riverpod sees the same object
+  before and after and `==` reports no change. `AgentBuilderViewModel`
+  overrides `updateShouldNotify` to always return true. Without it the screen
+  redraws on nothing — typing a name, adding a step, ticking a read all become
+  invisible. If you ever see the builder stop responding to edits, look there
+  first.
+- **An agent's `id` is minted once from its name and then never changes.**
+  Renaming an agent does not move its file, because the file *and* its run
+  history are keyed by the id.
+- **Renaming an input or a step rewrites everything that reads it** — the
+  `reads` lists and the `{{input.x}}` references in every prompt. Reordering
+  or deleting a step drops the reads that are no longer legal, since a step
+  may only read what runs before it.
+- **The schema editor's two tabs can each be the source of truth.** Normally
+  the field rows are and the JSON is rendered from them. But a schema can say
+  things the rows cannot draw — an `enum`, a `$ref`, a `minimum` — and
+  simplifying one of those would change what the model is allowed to emit. So
+  `fieldsFromSchema` returns **null** for those, and the editor keeps the JSON
+  exactly as written and says so on both tabs.
 
 ### Structured responses
 
