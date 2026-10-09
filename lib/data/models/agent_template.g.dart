@@ -76,6 +76,25 @@ Map<String, dynamic> _$AnswerStepToJson(AnswerStep instance) =>
       'view': instance.view,
     };
 
+AgentLimits _$AgentLimitsFromJson(Map<String, dynamic> json) => AgentLimits(
+  webResults: (json['web_results'] as num?)?.toInt() ?? 3,
+  webSnippetChars: (json['web_snippet_chars'] as num?)?.toInt() ?? 400,
+  webPageChars: (json['web_page_chars'] as num?)?.toInt() ?? 2500,
+  chunkChars: (json['chunk_chars'] as num?)?.toInt() ?? 700,
+  chunkOverlapChars: (json['chunk_overlap_chars'] as num?)?.toInt() ?? 120,
+  passages: (json['passages'] as num?)?.toInt() ?? 4,
+);
+
+Map<String, dynamic> _$AgentLimitsToJson(AgentLimits instance) =>
+    <String, dynamic>{
+      'web_results': instance.webResults,
+      'web_snippet_chars': instance.webSnippetChars,
+      'web_page_chars': instance.webPageChars,
+      'chunk_chars': instance.chunkChars,
+      'chunk_overlap_chars': instance.chunkOverlapChars,
+      'passages': instance.passages,
+    };
+
 AgentTemplate _$AgentTemplateFromJson(Map<String, dynamic> json) =>
     AgentTemplate(
       id: json['id'] as String,
@@ -98,6 +117,9 @@ AgentTemplate _$AgentTemplateFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['created_at'] as String),
       temperature: (json['temperature'] as num?)?.toDouble(),
+      limits: json['limits'] == null
+          ? null
+          : AgentLimits.fromJson(json['limits'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$AgentTemplateToJson(AgentTemplate instance) =>
@@ -114,4 +136,5 @@ Map<String, dynamic> _$AgentTemplateToJson(AgentTemplate instance) =>
       'answer': instance.answer.toJson(),
       'created_at': instance.createdAt?.toIso8601String(),
       'temperature': instance.temperature,
+      'limits': instance.limits?.toJson(),
     };

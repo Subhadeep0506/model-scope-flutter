@@ -60,13 +60,17 @@ class AgentCard extends StatelessWidget {
               Icon(Icons.chevron_right_rounded, size: 20, color: palette.muted),
             ],
           ),
-          if (template.toolNames.isNotEmpty) ...<Widget>[
+          if (template.toolNames.isNotEmpty || listing.agent.isEdited) ...[
             SizedBox(height: metrics.gapMd),
             Wrap(
               spacing: metrics.gapSm,
               runSpacing: metrics.gapSm,
               children: <Widget>[
                 for (final tool in template.toolNames) MonoChip(tool),
+                // So it is obvious which shipped agents have been changed, and
+                // which therefore have a built-in to go back to.
+                if (listing.agent.isEdited)
+                  MonoChip('EDITED', color: palette.primary),
               ],
             ),
           ],

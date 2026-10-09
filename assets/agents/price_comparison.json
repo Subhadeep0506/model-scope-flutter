@@ -5,6 +5,11 @@
   "purpose": "Compare prices for a product across retailers",
   "description": "Searches the web for a product, reads the most promising retailer page, normalises price and shipping, then ranks what it found. Tests web search, scraping and numeric reasoning in one run.",
   "icon": "tag",
+  "limits": {
+    "web_results": 5,
+    "web_snippet_chars": 250,
+    "web_page_chars": 2000
+  },
   "system_prompt": "You are a smart shopping assistant. Use only prices that appear in the material you are given - never estimate one, and never carry a price over from memory. When a figure is missing, say it is missing.",
   "inputs": [
     {

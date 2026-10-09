@@ -255,4 +255,26 @@ void main() {
     check(find.text('No custom agents yet — build one from tools').evaluate())
         .isEmpty();
   });
+
+  testWidgets('an edited built-in stays built-in and says it was edited', (
+    tester,
+  ) async {
+    await pumpBench(
+      tester,
+      agents: <Agent>[
+        Agent(
+          template: fakeAgentTemplate(id: 'web_answer', name: 'Web Answer'),
+          isBuiltIn: true,
+          isEdited: true,
+        ),
+      ],
+    );
+
+    // Editing one does not make it a new agent, so the card stays where it
+    // was — but which shipped agents have been changed is worth saying.
+    check(find.text('My agents').evaluate()).isNotEmpty();
+    check(find.text('No custom agents yet — build one from tools').evaluate())
+        .isNotEmpty();
+    check(find.text('EDITED').evaluate()).isNotEmpty();
+  });
 }

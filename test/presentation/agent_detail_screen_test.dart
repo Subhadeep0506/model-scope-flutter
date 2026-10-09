@@ -1,6 +1,8 @@
 import 'package:checks/checks.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:model_scope_flutter/config/di/view_models.dart';
 import 'package:model_scope_flutter/data/models/agent_run.dart';
 import 'package:model_scope_flutter/data/models/catalog_model.dart';
 import 'package:model_scope_flutter/data/models/model_descriptor.dart';
@@ -14,6 +16,7 @@ void main() {
 
   late FakeLlmService llm;
   late FakeAgentRunRepository history;
+  late FakeAgentRepository agents;
 
   Future<void> pumpDetail(
     WidgetTester tester, {
@@ -29,6 +32,9 @@ void main() {
 
     llm = FakeLlmService();
     history = FakeAgentRunRepository(runs);
+    agents = FakeAgentRepository(<Agent>[
+      Agent(template: fakeAgentTemplate(), isBuiltIn: true),
+    ]);
 
     await tester.pumpWidget(
       harness(
@@ -39,9 +45,7 @@ void main() {
           library: FakeModelLibraryRepository.of(
             models ?? <ModelDescriptor>[fakeInstalledModel()],
           ),
-          agents: FakeAgentRepository(<Agent>[
-            Agent(template: fakeAgentTemplate(), isBuiltIn: true),
-          ]),
+          agents: agents,
           agentRuns: history,
           tools: fakeToolRegistry(needingKeys: needingKeys),
           catalog: catalog ?? toolCapableCatalog(),
@@ -50,6 +54,40 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a built-in can be edited, not only copied', (tester) async {
+    await pumpDetail(tester);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+
+    // Editing one saves a file under the same id that shadows the bundled
+    // template, so the card, the name and the run history all stay put.
+    check(find.text('Edit agent').evaluate()).isNotEmpty();
+    check(find.text('Duplicate as a new agent').evaluate()).isNotEmpty();
+  });
+
+  testWidgets('an edit made above this screen is picked up', (tester) async {
+    await pumpDetail(tester);
+    check(find.text('Test Agent').evaluate()).isNotEmpty();
+
+    // What the builder does on save: writes the file, then invalidates the
+    // list. Without the screen re-reading, popping back from an edit would
+    // show — and run — what the agent used to be.
+    agents.stored = <Agent>[
+      Agent(
+        template: fakeAgentTemplate(name: 'Edited Agent'),
+        isBuiltIn: true,
+        isEdited: true,
+      ),
+    ];
+    ProviderScope.containerOf(tester.element(find.byType(AgentDetailScreen)))
+        .invalidate(agentsProvider);
+    await tester.pumpAndSettle();
+
+    check(find.text('Edited Agent').evaluate()).isNotEmpty();
+    check(find.text('Test Agent').evaluate()).isEmpty();
+  });
 
   testWidgets('heads the screen with the tools and the name', (tester) async {
     await pumpDetail(tester);

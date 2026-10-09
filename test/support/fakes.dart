@@ -388,6 +388,12 @@ class FakeAgentRepository implements AgentRepository {
   Future<List<Agent>> load() async => stored;
 
   @override
+  Future<Set<String>> builtInIds() async => <String>{
+    for (final agent in stored)
+      if (agent.isBuiltIn) agent.id,
+  };
+
+  @override
   Future<Agent?> byId(String id) async {
     for (final agent in stored) {
       if (agent.id == id) return agent;
@@ -1001,6 +1007,7 @@ AgentTemplate fakeAgentTemplate({
   List<PipelineStep>? pipeline,
   AnswerStep? answer,
   double? temperature,
+  AgentLimits? limits,
 }) => AgentTemplate(
   id: id,
   name: name,
@@ -1009,6 +1016,7 @@ AgentTemplate fakeAgentTemplate({
   icon: icon,
   systemPrompt: systemPrompt,
   temperature: temperature,
+  limits: limits,
   inputs:
       inputs ??
       const <AgentInput>[
@@ -1034,44 +1042,50 @@ AgentTemplate fakeAgentTemplate({
 
 /// A Document QnA shaped template: one file input, a retrieval step, and the
 /// `top_k` and `temperature` inputs the run reads.
-AgentTemplate fakeDocumentAgent({double? temperature}) => fakeAgentTemplate(
-  id: 'document_qna',
-  name: 'Document QnA',
-  temperature: temperature,
-  inputs: const <AgentInput>[
-    AgentInput(name: 'document', label: 'Document', type: AgentInputType.file),
-    AgentInput(
-      name: 'question',
-      label: 'Question',
-      defaultValue: 'What does it conclude?',
-    ),
-    AgentInput(
-      name: 'top_k',
-      label: 'Passages to retrieve',
-      type: AgentInputType.number,
-      defaultValue: '4',
-      required: false,
-    ),
-    AgentInput(
-      name: 'temperature',
-      label: 'Temperature',
-      type: AgentInputType.number,
-      required: false,
-    ),
-  ],
-  pipeline: const <PipelineStep>[
-    PipelineStep(
-      id: 'retrieve',
-      kind: StepKind.tool,
-      tool: 'search_document',
-      prompt: 'Search for {{input.question}}.',
-    ),
-  ],
-  answer: const AnswerStep(
-    prompt: 'Answer from the passages.',
-    reads: <String>['step.retrieve'],
-  ),
-);
+AgentTemplate fakeDocumentAgent({double? temperature, AgentLimits? limits}) =>
+    fakeAgentTemplate(
+      id: 'document_qna',
+      name: 'Document QnA',
+      temperature: temperature,
+      limits: limits,
+      inputs: const <AgentInput>[
+        AgentInput(
+          name: 'document',
+          label: 'Document',
+          type: AgentInputType.file,
+        ),
+        AgentInput(
+          name: 'question',
+          label: 'Question',
+          defaultValue: 'What does it conclude?',
+        ),
+        AgentInput(
+          name: 'top_k',
+          label: 'Passages to retrieve',
+          type: AgentInputType.number,
+          defaultValue: '4',
+          required: false,
+        ),
+        AgentInput(
+          name: 'temperature',
+          label: 'Temperature',
+          type: AgentInputType.number,
+          required: false,
+        ),
+      ],
+      pipeline: const <PipelineStep>[
+        PipelineStep(
+          id: 'retrieve',
+          kind: StepKind.tool,
+          tool: 'search_document',
+          prompt: 'Search for {{input.question}}.',
+        ),
+      ],
+      answer: const AnswerStep(
+        prompt: 'Answer from the passages.',
+        reads: <String>['step.retrieve'],
+      ),
+    );
 
 /// An installed embedding model, which Document QnA refuses to run without.
 ModelDescriptor fakeEmbeddingModel() => ModelDescriptor(

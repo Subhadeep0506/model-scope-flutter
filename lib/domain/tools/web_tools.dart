@@ -1,5 +1,6 @@
 library;
 
+import '../../data/models/agent_template.dart';
 import '../../data/models/scraped_page.dart';
 import '../../data/models/web_search.dart';
 import '../../data/sources/firecrawl_api_client.dart';
@@ -8,17 +9,49 @@ import '../services/firecrawl_web_crawler_service.dart';
 import '../services/tavily_web_search_service.dart';
 import 'tool_definition.dart';
 
-const int kSnippetLimit = 400;
-const int kPageLimit = 4000;
+const int kMaxResults = AgentLimits.defaultWebResults;
+const int kSnippetLimit = AgentLimits.defaultWebSnippetChars;
+const int kPageLimit = AgentLimits.defaultWebPageChars;
+
+/// What the current agent run wants from the web.
+///
+/// Held in one mutable object the run writes before it starts, for the same
+/// reason [RetrievalSettings] is: a tool is built once in the registry and
+/// knows nothing about the run calling it, so the numbers have to be read per
+/// call rather than captured when the tool was made.
+class WebSearchSettings {
+  WebSearchSettings({
+    this.maxResults = kMaxResults,
+    this.snippetLimit = kSnippetLimit,
+    this.pageLimit = kPageLimit,
+  });
+
+  /// How many pages a search asks Tavily for.
+  int maxResults;
+
+  /// How much of each result's extract survives into the model's context.
+  int snippetLimit;
+
+  /// How much of a fetched page does.
+  int pageLimit;
+
+  void apply({int? maxResults, int? snippetLimit, int? pageLimit}) {
+    this.maxResults = (maxResults ?? this.maxResults).clamp(1, 20);
+    this.snippetLimit = (snippetLimit ?? this.snippetLimit).clamp(80, 20000);
+    this.pageLimit = (pageLimit ?? this.pageLimit).clamp(200, 100000);
+  }
+}
 
 ToolDefinition webSearchTool(
   TavilyWebSearchService service, {
-  int snippetLimit = kSnippetLimit,
+  WebSearchSettings? settings,
 }) {
+  final limits = settings ?? WebSearchSettings();
+
   Future<String> run({required String query}) async {
     try {
-      final result = await service.search(query);
-      return formatSearchResult(result, snippetLimit: snippetLimit);
+      final result = await service.search(query, maxResults: limits.maxResults);
+      return formatSearchResult(result, snippetLimit: limits.snippetLimit);
     } on TavilyApiException catch (error) {
       return 'The web search failed. $error';
     }
@@ -42,12 +75,14 @@ ToolDefinition webSearchTool(
 
 ToolDefinition readWebPageTool(
   FirecrawlWebCrawlerService service, {
-  int pageLimit = kPageLimit,
+  WebSearchSettings? settings,
 }) {
+  final limits = settings ?? WebSearchSettings();
+
   Future<String> run({required String url}) async {
     try {
       final page = await service.read(url);
-      return formatPage(page, pageLimit: pageLimit);
+      return formatPage(page, pageLimit: limits.pageLimit);
     } on FirecrawlApiException catch (error) {
       return 'That page could not be read. $error';
     }
@@ -71,7 +106,16 @@ ToolDefinition readWebPageTool(
 List<ToolDefinition> webTools({
   required TavilyWebSearchService search,
   required FirecrawlWebCrawlerService crawler,
-}) => <ToolDefinition>[webSearchTool(search), readWebPageTool(crawler)];
+  WebSearchSettings? settings,
+}) {
+  // One holder for both tools, so an agent's limits are written once and a
+  // search and the page read that follows it agree about the budget.
+  final limits = settings ?? WebSearchSettings();
+  return <ToolDefinition>[
+    webSearchTool(search, settings: limits),
+    readWebPageTool(crawler, settings: limits),
+  ];
+}
 
 String formatSearchResult(
   WebSearchResult result, {

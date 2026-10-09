@@ -10,6 +10,7 @@ import 'package:model_scope_flutter/domain/services/open_meteo_weather_service.d
 import 'package:model_scope_flutter/domain/services/tavily_web_search_service.dart';
 import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
 import 'package:model_scope_flutter/domain/tools/document_tools.dart';
+import 'package:model_scope_flutter/domain/tools/web_tools.dart';
 import 'package:model_scope_flutter/domain/tools/tool_definition.dart';
 import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
 
@@ -42,6 +43,7 @@ void main() {
       documents: documents,
       embedder: FakeEmbeddingService(),
       retrieval: RetrievalSettings(),
+      web: WebSearchSettings(),
       hasEmbeddingModel: () async => hasEmbeddingModel,
     );
   }
@@ -120,6 +122,7 @@ void main() {
         documents: documents,
         embedder: FakeEmbeddingService(),
         retrieval: RetrievalSettings(),
+        web: WebSearchSettings(),
         hasEmbeddingModel: () async => true,
       );
 

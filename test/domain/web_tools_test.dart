@@ -46,6 +46,76 @@ void main() {
     'data': <String, Object?>{'markdown': markdown, 'metadata': metadata},
   };
 
+  group('the limits a run sets', () {
+    test('the result count reaches Tavily', () async {
+      // What the agent's `WEB RESULTS` slider is for: the number has to leave
+      // the device, or a lower setting costs nothing and the context still
+      // fills up.
+      Map<String, Object?>? sent;
+      final tool = webSearchTool(
+        searchOver(
+          MockClient((request) async {
+            sent = jsonDecode(request.body) as Map<String, Object?>;
+            return http.Response(jsonEncode(hitsOf(const [])), 200);
+          }),
+        ),
+        settings: WebSearchSettings(maxResults: 2),
+      );
+
+      await invoke(tool, <Symbol, Object?>{#query: 'q'});
+
+      check(sent).isNotNull()['max_results'].equals(2);
+    });
+
+    test('a limit changed after the tool was built is still used', () async {
+      // The registry builds a tool once and a run writes its limits later, so
+      // the numbers have to be read per call rather than captured.
+      final settings = WebSearchSettings(maxResults: 2);
+      final sent = <int>[];
+      final tool = webSearchTool(
+        searchOver(
+          MockClient((request) async {
+            final body = jsonDecode(request.body) as Map<String, Object?>;
+            sent.add(body['max_results'] as int);
+            return http.Response(jsonEncode(hitsOf(const [])), 200);
+          }),
+        ),
+        settings: settings,
+      );
+
+      await invoke(tool, <Symbol, Object?>{#query: 'q'});
+      settings.apply(maxResults: 6);
+      await invoke(tool, <Symbol, Object?>{#query: 'q'});
+
+      check(sent).deepEquals(<int>[2, 6]);
+    });
+
+    test('both web tools share one set of limits', () {
+      // Built from one holder, so a run writes the budget once and the search
+      // and the page read that follows it agree about it.
+      final settings = WebSearchSettings();
+      final tools = webTools(
+        search: searchOver(answering(hitsOf(const []))),
+        crawler: crawlerOver(answering(pageOf(''))),
+        settings: settings,
+      );
+
+      check(tools).length.equals(2);
+      settings.apply(maxResults: 9, pageLimit: 1000);
+      check(settings.maxResults).equals(9);
+      check(settings.pageLimit).equals(1000);
+    });
+
+    test('a nonsensical number is held to something workable', () {
+      final settings = WebSearchSettings()
+        ..apply(maxResults: 0, snippetLimit: 1, pageLimit: -5);
+
+      check(settings.maxResults).equals(1);
+      check(settings.snippetLimit).equals(80);
+      check(settings.pageLimit).equals(200);
+    });
+  });
+
   group('what the model is told', () {
     test('each tool takes one required named String', () {
       final search = webSearchTool(searchOver(answering(hitsOf(const []))));
@@ -147,7 +217,7 @@ void main() {
             ]),
           ),
         ),
-        snippetLimit: 50,
+        settings: WebSearchSettings(snippetLimit: 80),
       );
 
       final answer = await invoke(tool, <Symbol, Object?>{#query: 'q'});
@@ -212,7 +282,7 @@ void main() {
       final body = List<String>.filled(500, 'A sentence of text.').join('\n');
       final tool = readWebPageTool(
         crawlerOver(answering(pageOf(body))),
-        pageLimit: 200,
+        settings: WebSearchSettings(pageLimit: 200),
       );
 
       final answer = await invoke(tool, <Symbol, Object?>{

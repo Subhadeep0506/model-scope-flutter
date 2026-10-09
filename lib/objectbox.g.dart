@@ -65,7 +65,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(2, 5823116824665715704),
     name: 'IngestedDocument',
-    lastPropertyId: const obx_int.IdUid(7, 6417658989410312728),
+    lastPropertyId: const obx_int.IdUid(8, 8216926941859988186),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -109,6 +109,12 @@ final _entities = <obx_int.ModelEntity>[
         id: const obx_int.IdUid(7, 6417658989410312728),
         name: 'ingestedAt',
         type: 10,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 8216926941859988186),
+        name: 'chunkChars',
+        type: 6,
         flags: 0,
       ),
     ],
@@ -238,7 +244,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final titleOffset = fbb.writeString(object.title);
         final sourcePathOffset = fbb.writeString(object.sourcePath);
         final embedModelIdOffset = fbb.writeString(object.embedModelId);
-        fbb.startTable(8);
+        fbb.startTable(9);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, docIdOffset);
         fbb.addOffset(2, titleOffset);
@@ -246,6 +252,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(4, object.chunkCount);
         fbb.addOffset(5, embedModelIdOffset);
         fbb.addInt64(6, object.ingestedAt.millisecondsSinceEpoch);
+        fbb.addInt64(7, object.chunkChars);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -275,6 +282,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final ingestedAtParam = DateTime.fromMillisecondsSinceEpoch(
           const fb.Int64Reader().vTableGet(buffer, rootOffset, 16, 0),
         );
+        final chunkCharsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          18,
+          0,
+        );
         final object = IngestedDocument(
           id: idParam,
           docId: docIdParam,
@@ -283,6 +296,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           chunkCount: chunkCountParam,
           embedModelId: embedModelIdParam,
           ingestedAt: ingestedAtParam,
+          chunkChars: chunkCharsParam,
         );
 
         return object;
@@ -356,5 +370,10 @@ class IngestedDocument_ {
   /// See [IngestedDocument.ingestedAt].
   static final ingestedAt = obx.QueryDateProperty<IngestedDocument>(
     _entities[1].properties[6],
+  );
+
+  /// See [IngestedDocument.chunkChars].
+  static final chunkChars = obx.QueryIntegerProperty<IngestedDocument>(
+    _entities[1].properties[7],
   );
 }

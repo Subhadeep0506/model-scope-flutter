@@ -59,6 +59,7 @@ class IngestedDocument {
     required this.chunkCount,
     required this.embedModelId,
     required this.ingestedAt,
+    this.chunkChars = 0,
   });
 
   @Id()
@@ -80,6 +81,13 @@ class IngestedDocument {
   /// that are not comparable with these, so changing model forces a re-index
   /// rather than silently returning nonsense.
   String embedModelId;
+
+  /// How long each passage was cut to. Recorded for the same reason
+  /// [embedModelId] is: changing it makes these chunks the wrong ones, so the
+  /// document has to be read and encoded again rather than answered from
+  /// passages of the old size. Zero on a row written before this was stored,
+  /// which reads as "unknown" and forces one re-index.
+  int chunkChars;
 
   @Property(type: PropertyType.date)
   DateTime ingestedAt;

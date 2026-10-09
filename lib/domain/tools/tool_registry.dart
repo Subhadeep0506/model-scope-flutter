@@ -27,10 +27,11 @@ class ToolRegistry {
     required DocumentIndexRepository documents,
     required EmbeddingService embedder,
     required RetrievalSettings retrieval,
+    required WebSearchSettings web,
     required Future<bool> Function() hasEmbeddingModel,
   }) => ToolRegistry(
     tools: <ToolDefinition>[
-      ...webTools(search: search, crawler: crawler),
+      ...webTools(search: search, crawler: crawler, settings: web),
       weatherTool(weather),
       searchDocumentTool(
         index: documents,

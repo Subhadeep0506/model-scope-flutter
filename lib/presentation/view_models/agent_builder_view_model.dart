@@ -61,6 +61,16 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
 
   BuilderMode get mode => _mode;
 
+  bool _isBuiltIn = false;
+
+  /// Whether saving writes over a built-in rather than over a file of the
+  /// user's own.
+  ///
+  /// What the destructive button means hangs on this: for an override it is
+  /// `Reset to built-in`, which puts the shipped version back, and for
+  /// anything else it is `Delete agent`, which removes it for good.
+  bool get isBuiltInOverride => _mode == BuilderMode.edit && _isBuiltIn;
+
   @override
   Future<AgentDraft> build() async => AgentDraft();
 
@@ -80,6 +90,7 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   Future<void> open({required String? agentId, required bool duplicate}) async {
     if (agentId == null) {
       _mode = BuilderMode.create;
+      _isBuiltIn = false;
       state = AsyncData<AgentDraft>(AgentDraft());
       return;
     }
@@ -96,10 +107,12 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
       }
 
       _mode = duplicate ? BuilderMode.duplicate : BuilderMode.edit;
+      _isBuiltIn = agent.isBuiltIn;
       final draft = AgentDraft.from(
         agent.template,
         // A duplicate carries no id, so saving mints a new one and leaves the
-        // original where it is.
+        // original where it is. An edit keeps the id — including a built-in's,
+        // where saving writes a file that shadows the bundled one.
         id: duplicate ? null : agent.id,
       );
       if (duplicate) draft.name = '${agent.template.name} copy';
@@ -134,6 +147,38 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
 
   void setSystemPrompt(String value) {
     _draft.systemPrompt = value;
+    _touch();
+  }
+
+  // ---- limits -------------------------------------------------------------
+
+  void setWebResults(int value) {
+    _draft.limits.webResults = value;
+    _touch();
+  }
+
+  void setWebSnippetChars(int value) {
+    _draft.limits.webSnippetChars = value;
+    _touch();
+  }
+
+  void setWebPageChars(int value) {
+    _draft.limits.webPageChars = value;
+    _touch();
+  }
+
+  void setChunkChars(int value) {
+    _draft.limits.chunkChars = value;
+    _touch();
+  }
+
+  void setChunkOverlapChars(int value) {
+    _draft.limits.chunkOverlapChars = value;
+    _touch();
+  }
+
+  void setPassages(int value) {
+    _draft.limits.passages = value;
     _touch();
   }
 
@@ -494,12 +539,21 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     }
   }
 
-  Future<void> delete() async {
+  Future<void> delete() => _removeFile('Deleted agent');
+
+  /// Throws away the user's version of a built-in.
+  ///
+  /// The same file removal as [delete] — the bundled template was never gone,
+  /// only shadowed, so dropping the override is all it takes to have the
+  /// shipped agent load again.
+  Future<void> reset() => _removeFile('Reset agent');
+
+  Future<void> _removeFile(String what) async {
     final id = _draft.id;
     if (id == null) return;
     await ref.read(agentRepositoryProvider).delete(id);
     ref.invalidate(agentsProvider);
-    developer.log('Deleted agent $id', name: _logName);
+    developer.log('$what $id', name: _logName);
   }
 }
 

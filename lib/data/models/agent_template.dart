@@ -188,6 +188,98 @@ class AnswerStep {
   Map<String, dynamic> toJson() => _$AnswerStepToJson(this);
 }
 
+/// How much text one run is allowed to push at the model.
+///
+/// A phone-sized context is the scarce resource here: at the default 4096
+/// tokens, five search results with a long extract each, or one whole fetched
+/// page, is enough to overflow it and end the run in an error. Every number
+/// below is a cap on something that would otherwise be fixed in the code, and
+/// each agent carries its own — a two-step web agent and a document agent want
+/// very different budgets.
+@JsonSerializable(fieldRename: FieldRename.snake)
+class AgentLimits {
+  const AgentLimits({
+    this.webResults = defaultWebResults,
+    this.webSnippetChars = defaultWebSnippetChars,
+    this.webPageChars = defaultWebPageChars,
+    this.chunkChars = defaultChunkChars,
+    this.chunkOverlapChars = defaultChunkOverlapChars,
+    this.passages = defaultPassages,
+  });
+
+  factory AgentLimits.fromJson(Map<String, dynamic> json) =>
+      _$AgentLimitsFromJson(json);
+
+  static const int defaultWebResults = 3;
+  static const int defaultWebSnippetChars = 400;
+  static const int defaultWebPageChars = 2500;
+  static const int defaultChunkChars = 700;
+  static const int defaultChunkOverlapChars = 120;
+  static const int defaultPassages = 4;
+
+  /// What each slider in the builder's `Limits` card may be dragged between,
+  /// and what [clamped] holds a hand-written file to.
+  static const (int, int) webResultsRange = (1, 10);
+  static const (int, int) webSnippetCharsRange = (80, 2000);
+  static const (int, int) webPageCharsRange = (500, 20000);
+  static const (int, int) chunkCharsRange = (200, 4000);
+  static const (int, int) chunkOverlapCharsRange = (0, 1000);
+  static const (int, int) passagesRange = (1, 20);
+
+  /// How many pages `web_search` asks for.
+  @JsonKey(defaultValue: defaultWebResults)
+  final int webResults;
+
+  /// How much of each search result's extract is kept.
+  @JsonKey(defaultValue: defaultWebSnippetChars)
+  final int webSnippetChars;
+
+  /// How much of a page `read_web_page` returns before cutting it short.
+  @JsonKey(defaultValue: defaultWebPageChars)
+  final int webPageChars;
+
+  /// How long each passage of an indexed document is.
+  ///
+  /// Applies when the document is encoded, not when it is searched, so
+  /// changing it re-indexes rather than taking effect on the next question.
+  @JsonKey(defaultValue: defaultChunkChars)
+  final int chunkChars;
+
+  /// How much each passage repeats of the one before, so a sentence split
+  /// across a boundary is still retrievable whole.
+  @JsonKey(defaultValue: defaultChunkOverlapChars)
+  final int chunkOverlapChars;
+
+  /// How many passages `search_document` returns.
+  @JsonKey(defaultValue: defaultPassages)
+  final int passages;
+
+  /// This, with every number held to its range.
+  ///
+  /// Applied on the way out rather than in the constructor, because a template
+  /// may be written by hand: a zero or a six-figure number in a JSON file must
+  /// cost the user a sensible run, not a wedged one.
+  AgentLimits clamped() => AgentLimits(
+    webResults: _hold(webResults, webResultsRange),
+    webSnippetChars: _hold(webSnippetChars, webSnippetCharsRange),
+    webPageChars: _hold(webPageChars, webPageCharsRange),
+    chunkChars: _hold(chunkChars, chunkCharsRange),
+    // Never more than half a chunk, whatever the file says: the chunker halves
+    // it anyway, and a slider that appears to do nothing is worse than one
+    // that stops.
+    chunkOverlapChars: _hold(
+      chunkOverlapChars,
+      chunkOverlapCharsRange,
+    ).clamp(0, _hold(chunkChars, chunkCharsRange) ~/ 2),
+    passages: _hold(passages, passagesRange),
+  );
+
+  static int _hold(int value, (int, int) range) =>
+      value.clamp(range.$1, range.$2);
+
+  Map<String, dynamic> toJson() => _$AgentLimitsToJson(this);
+}
+
 /// One agent, parsed from a single JSON file.
 ///
 /// The same shape whether it was shipped in `assets/agents/` or written by the
@@ -209,6 +301,7 @@ class AgentTemplate {
     this.inputs = const <AgentInput>[],
     this.createdAt,
     this.temperature,
+    this.limits,
   });
 
   factory AgentTemplate.fromJson(Map<String, dynamic> json) =>
@@ -264,6 +357,17 @@ class AgentTemplate {
   /// material wants a little more, and an input named `temperature` overrides
   /// this again per run.
   final double? temperature;
+
+  /// How much text this agent may push at the model, or null to take the
+  /// defaults.
+  ///
+  /// Nullable rather than defaulted, like [temperature], so that every file
+  /// written before this existed still parses — read it through
+  /// [limitsOrDefault], never directly.
+  final AgentLimits? limits;
+
+  /// This agent's limits, with every number held to its range.
+  AgentLimits get limitsOrDefault => (limits ?? const AgentLimits()).clamped();
 
   /// Every tool this agent can reach, in pipeline order and without repeats —
   /// the mono chips on the agent card.

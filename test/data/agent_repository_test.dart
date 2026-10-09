@@ -82,11 +82,44 @@ void main() {
 
     final agents = await repository.load();
 
-    // So a user can copy a built-in, change it, and have theirs be the one
+    // So a built-in can be edited in place and the user's version be the one
     // that runs.
     check(agents).length.equals(1);
     check(agents.single.template.name).equals('My version');
-    check(agents.single.isBuiltIn).isFalse();
+    // Still built-in: the bundle's copy is untouched, which is what makes the
+    // edit resettable and what keeps it under `Built-in` on the bench.
+    check(agents.single.isBuiltIn).isTrue();
+    check(agents.single.isEdited).isTrue();
+    check(agents.single.canReset).isTrue();
+  });
+
+  test('an edited built-in sorts with the built-ins, not above them', () async {
+    final store = AgentFileStore(directory: root);
+    await store.write('shipped', templateMap('shipped', name: 'My version'));
+    await store.write('mine', templateMap('mine', name: 'Mine'));
+    final repository = repositoryOf(<String, Map<String, Object?>>{
+      'shipped': templateMap('shipped', name: 'Theirs'),
+    }, store);
+
+    final agents = await repository.load();
+
+    // An edit is not a new agent, so editing one must not move its card from
+    // `Built-in` up to `My agents`.
+    check(agents.map((agent) => agent.id).toList())
+        .deepEquals(<String>['mine', 'shipped']);
+    check(agents.first.isEdited).isFalse();
+  });
+
+  test('reports which ids ship in the bundle', () async {
+    final store = AgentFileStore(directory: root);
+    await store.write('mine', templateMap('mine'));
+    final repository = repositoryOf(<String, Map<String, Object?>>{
+      'shipped': templateMap('shipped'),
+    }, store);
+
+    // What tells an edit from a deletion: only an id with a bundled version
+    // behind it can be reset.
+    check(await repository.builtInIds()).deepEquals(<String>{'shipped'});
   });
 
   test('sorts custom agents by name', () async {

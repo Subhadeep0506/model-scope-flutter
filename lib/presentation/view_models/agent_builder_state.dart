@@ -174,6 +174,47 @@ class DraftAnswer {
   }
 }
 
+/// The context limits being edited — the `Limits` card's six sliders.
+///
+/// Mutable like the rest of the draft, and always populated: a draft built
+/// from a template with no limits block starts at the defaults, so the sliders
+/// have somewhere to sit.
+class DraftLimits {
+  DraftLimits({
+    this.webResults = AgentLimits.defaultWebResults,
+    this.webSnippetChars = AgentLimits.defaultWebSnippetChars,
+    this.webPageChars = AgentLimits.defaultWebPageChars,
+    this.chunkChars = AgentLimits.defaultChunkChars,
+    this.chunkOverlapChars = AgentLimits.defaultChunkOverlapChars,
+    this.passages = AgentLimits.defaultPassages,
+  });
+
+  int webResults;
+  int webSnippetChars;
+  int webPageChars;
+  int chunkChars;
+  int chunkOverlapChars;
+  int passages;
+
+  AgentLimits toLimits() => AgentLimits(
+    webResults: webResults,
+    webSnippetChars: webSnippetChars,
+    webPageChars: webPageChars,
+    chunkChars: chunkChars,
+    chunkOverlapChars: chunkOverlapChars,
+    passages: passages,
+  ).clamped();
+
+  static DraftLimits from(AgentLimits limits) => DraftLimits(
+    webResults: limits.webResults,
+    webSnippetChars: limits.webSnippetChars,
+    webPageChars: limits.webPageChars,
+    chunkChars: limits.chunkChars,
+    chunkOverlapChars: limits.chunkOverlapChars,
+    passages: limits.passages,
+  );
+}
+
 /// A whole agent being edited.
 ///
 /// Separate from [AgentTemplate] because a form holds things a template
@@ -190,11 +231,13 @@ class AgentDraft {
     List<DraftInput>? inputs,
     List<DraftStep>? steps,
     DraftAnswer? answer,
+    DraftLimits? limits,
     this.createdAt,
     this.temperature,
   }) : inputs = inputs ?? <DraftInput>[],
        steps = steps ?? <DraftStep>[],
-       answer = answer ?? DraftAnswer();
+       answer = answer ?? DraftAnswer(),
+       limits = limits ?? DraftLimits();
 
   /// Null until the agent has been saved once. Set then and never changed,
   /// so renaming an agent does not move its file or orphan its run history.
@@ -214,6 +257,9 @@ class AgentDraft {
   final List<DraftStep> steps;
   DraftAnswer answer;
 
+  /// How much text a run of this agent may push at the model.
+  final DraftLimits limits;
+
   final DateTime? createdAt;
 
   /// Carried through from the file; the builder draws no control for it.
@@ -221,6 +267,24 @@ class AgentDraft {
 
   /// Whether this draft is editing something already saved.
   bool get isExisting => id != null;
+
+  /// The tools each half of the `Limits` card belongs to. A weather agent
+  /// should not be shown a passage length, so the card asks these first.
+  static const Set<String> webToolNames = <String>{
+    'web_search',
+    'read_web_page',
+  };
+  static const String documentToolName = 'search_document';
+
+  bool get usesWebTools => _usesAny(webToolNames);
+
+  bool get usesDocumentTools => _usesAny(<String>{documentToolName});
+
+  /// A tool left on a step that has since been switched to Reason does not
+  /// count: [DraftStep.toStep] drops it, so it will never be called.
+  bool _usesAny(Set<String> tools) => steps.any(
+    (step) => step.kind == StepKind.tool && tools.contains(step.tool),
+  );
 
   AgentTemplate toTemplate({required String id, DateTime? createdAt}) =>
       AgentTemplate(
@@ -235,6 +299,7 @@ class AgentDraft {
         answer: answer.toAnswer(),
         createdAt: createdAt ?? this.createdAt,
         temperature: temperature,
+        limits: limits.toLimits(),
       );
 
   static AgentDraft from(AgentTemplate template, {String? id}) => AgentDraft(
@@ -251,6 +316,7 @@ class AgentDraft {
       for (final step in template.pipeline) DraftStep.from(step),
     ],
     answer: DraftAnswer.from(template.answer),
+    limits: DraftLimits.from(template.limitsOrDefault),
     createdAt: template.createdAt,
     temperature: template.temperature,
   );

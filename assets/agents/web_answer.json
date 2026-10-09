@@ -5,6 +5,10 @@
   "purpose": "Answer one question from a live web search",
   "description": "Searches the web once and answers from what came back, citing the pages it used. The shortest agent here — two steps — and the one to try first when checking whether a model calls a tool at all.",
   "icon": "search",
+  "limits": {
+    "web_results": 4,
+    "web_snippet_chars": 350
+  },
   "system_prompt": "You are a careful research assistant. Answer only from the search results you are given, and name the source of anything you state. If the results do not cover the question, say so rather than filling the gap from memory.",
   "inputs": [
     {

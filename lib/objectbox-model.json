@@ -43,7 +43,7 @@
     },
     {
       "id": "2:5823116824665715704",
-      "lastPropertyId": "7:6417658989410312728",
+      "lastPropertyId": "8:8216926941859988186",
       "name": "IngestedDocument",
       "properties": [
         {
@@ -83,6 +83,11 @@
           "id": "7:6417658989410312728",
           "name": "ingestedAt",
           "type": 10
+        },
+        {
+          "id": "8:8216926941859988186",
+          "name": "chunkChars",
+          "type": 6
         }
       ],
       "relations": []

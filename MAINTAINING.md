@@ -24,7 +24,7 @@ Run these from the project root (`model_scope_flutter/`).
 [app_cache_service.dart:18](lib/domain/services/app_cache_service.dart#L18). That
 one is deliberate and known. If you ever see **2** issues, your change caused it.
 
-**`flutter test` should say `806 passed`.** If the number drops, you broke
+**`flutter test` should say `836 passed`.** If the number drops, you broke
 something. If it rises, you added a test — good.
 
 There is nothing to run locally on this machine. The only way to see the app
@@ -346,18 +346,20 @@ one asking the model to do a single thing. It is a JSON file and nothing else.
 
 **There are two ways to make one, and the ordinary one is on the phone.** Agent
 tab → `+ New agent` opens the pipeline builder, which writes a file into the
-app's documents directory. A built-in can be duplicated from its own screen
-(⋮ → `Duplicate as a new agent`) and then edited, which is the quickest way to
-see how a shipped agent is put together — or to break one on purpose and watch
-what the model does. The builder's ⋮ also has `Edit as JSON`, which hands you
-the whole file for anything the form draws no control for.
+app's documents directory. The builder's ⋮ also has `Edit as JSON`, which hands
+you the whole file for anything the form draws no control for.
+
+**Every agent can be edited, built-in or not** (⋮ → `Edit agent`). A built-in's
+own file is in the bundle where nothing on the device can touch it, so saving
+writes a file into the documents directory under the *same id*, which shadows
+it — the card, the name and the run history all stay where they were, and the
+bench marks it `EDITED`. The builder's ⋮ then reads `Reset to built-in`, which
+deletes that file and lets the shipped version load again. ⋮ → `Duplicate as a
+new agent` is still there for keeping the original alongside a variant.
 
 **The other way is to ship one**: drop a file in
 [assets/agents/](assets/agents/) and it appears under `Built-in`. The app finds
-it by listing the directory, so there is no index to update. A built-in cannot
-be edited or deleted on the device — its file is in the bundle. (A *custom*
-agent whose `id` matches a built-in replaces it, which is how an override
-works if you ever want one.)
+it by listing the directory, so there is no index to update.
 
 Both routes produce the same shape of file. A file looks like this
 ([web_answer.json](assets/agents/web_answer.json) is the shortest real one):
@@ -383,9 +385,51 @@ Both routes produce the same shape of file. A file looks like this
   "answer": {
     "prompt": "Answer using only the results above, and give the URL.",
     "reads": ["input.question", "step.search"]
+  },
+
+  "limits": {                          // optional; see below
+    "web_results": 4,
+    "web_snippet_chars": 350
   }
 }
 ```
+
+**`limits` is how much text a run may push at the model.** A phone-sized
+context is the scarce resource: at the default 4096 tokens, five search
+results with long extracts, or one whole fetched page, is enough to overflow
+it and end the run in an error. The six numbers, with their defaults:
+
+| key | default | what it caps |
+|---|---|---|
+| `web_results` | 3 | how many pages `web_search` asks Tavily for |
+| `web_snippet_chars` | 400 | how much of each result's extract is kept |
+| `web_page_chars` | 2500 | how much of a page `read_web_page` returns |
+| `chunk_chars` | 700 | how long each passage of an indexed document is |
+| `chunk_overlap_chars` | 120 | how much each passage repeats of the one before |
+| `passages` | 4 | how many passages `search_document` returns |
+
+Leave the block out and an agent takes all six defaults, so a file written
+before this existed still runs the way it did. Each number is held to a
+sensible range when it is read, so a typo in a hand-written file costs you a
+clamped run rather than a wedged one — the ranges live beside the defaults in
+`AgentLimits`, in [agent_template.dart](lib/data/models/agent_template.dart).
+
+On the phone these are the `Limits` sliders in the agent editor, and only the
+half that applies is drawn: the web rows need a step that searches or fetches,
+the document rows a step that retrieves.
+
+Two things to know if you change how they work:
+
+- **The tools read them per call, not at construction.** A tool is built once
+  in the registry and knows nothing about the run calling it, so the run
+  writes into `WebSearchSettings` and `RetrievalSettings` before it starts —
+  mutable holders behind `webSearchSettingsProvider` and
+  `retrievalSettingsProvider`. Capture a number when the tool is made and the
+  slider will appear to do nothing.
+- **Changing `chunk_chars` re-indexes the document.** It is recorded on the
+  `IngestedDocument` row, and the "already indexed, nothing to do" shortcut
+  compares it as well as the embedding model. Without that the stored passages
+  would be the old length and the setting would silently not apply.
 
 **Steps come in two kinds.** A `tool` step names one tool and gives the model
 *only* that tool — it decides what arguments to pass, nothing else. A `reason`
@@ -708,7 +752,7 @@ The gap scale, so you pick the right one: `gapXs` 4, `gapSm` 8, `gapMd` 12,
 ### Running them
 
 ```bash
-flutter test                                        # all 572
+flutter test                                        # all 836
 flutter test test/presentation/home_screen_test.dart  # just one file
 ```
 
@@ -854,7 +898,7 @@ knowing them up front saves a round trip.
 ```bash
 dart format lib test     # tidy
 flutter analyze .        # must say "1 issue found"
-flutter test             # must say "572 passed" (or more)
+flutter test             # must say "836 passed" (or more)
 ```
 
 If you changed anything that runs on the phone — a screen, a permission, the

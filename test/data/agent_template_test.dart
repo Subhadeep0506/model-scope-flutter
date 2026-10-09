@@ -205,4 +205,76 @@ void main() {
       check(template.inputNamed('gone')).isNull();
     });
   });
+
+  group('limits', () {
+    AgentTemplate withLimits(Map<String, Object?>? limits) =>
+        AgentTemplate.fromJson(<String, Object?>{
+          'id': 'a',
+          'name': 'A',
+          'purpose': 'p',
+          'system_prompt': 's',
+          'pipeline': <Map<String, Object?>>[],
+          'answer': <String, Object?>{'prompt': 'Answer.'},
+          'limits': ?limits,
+        });
+
+    test('a file with no limits block takes the defaults', () {
+      // Every template written before limits existed still has to run, and
+      // run the way it used to.
+      final limits = withLimits(null).limitsOrDefault;
+
+      check(limits.webResults).equals(AgentLimits.defaultWebResults);
+      check(limits.webSnippetChars).equals(AgentLimits.defaultWebSnippetChars);
+      check(limits.webPageChars).equals(AgentLimits.defaultWebPageChars);
+      check(limits.chunkChars).equals(AgentLimits.defaultChunkChars);
+      check(limits.passages).equals(AgentLimits.defaultPassages);
+    });
+
+    test('a half-written block fills the rest in', () {
+      final limits = withLimits(<String, Object?>{'web_results': 7})
+          .limitsOrDefault;
+
+      check(limits.webResults).equals(7);
+      check(limits.webSnippetChars).equals(AgentLimits.defaultWebSnippetChars);
+    });
+
+    test('numbers outside the range are held to it', () {
+      // A template can be written by hand or through the JSON editor, so a
+      // zero or a six-figure number has to cost a sensible run, not a wedged
+      // one.
+      final limits = withLimits(<String, Object?>{
+        'web_results': 0,
+        'web_page_chars': 900000,
+        'passages': -3,
+      }).limitsOrDefault;
+
+      check(limits.webResults).equals(AgentLimits.webResultsRange.$1);
+      check(limits.webPageChars).equals(AgentLimits.webPageCharsRange.$2);
+      check(limits.passages).equals(AgentLimits.passagesRange.$1);
+    });
+
+    test('the overlap never exceeds half a passage', () {
+      // The chunker halves it anyway; saying so here keeps the file honest
+      // about what the run will do.
+      final limits = withLimits(<String, Object?>{
+        'chunk_chars': 400,
+        'chunk_overlap_chars': 900,
+      }).limitsOrDefault;
+
+      check(limits.chunkOverlapChars).equals(200);
+    });
+
+    test('survives a round trip through JSON', () {
+      final written = withLimits(<String, Object?>{
+        'web_results': 6,
+        'chunk_chars': 1200,
+      }).toJson();
+      final read = AgentTemplate.fromJson(
+        jsonDecode(jsonEncode(written)) as Map<String, dynamic>,
+      );
+
+      check(read.limitsOrDefault.webResults).equals(6);
+      check(read.limitsOrDefault.chunkChars).equals(1200);
+    });
+  });
 }

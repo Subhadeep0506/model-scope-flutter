@@ -67,6 +67,16 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     final state = ref.watch(agentRunViewModelProvider);
     final metrics = context.metrics;
 
+    // Re-read the agent whenever the list changes. Only the builder changes
+    // it, so this fires when the user has just saved an edit or reset a
+    // built-in on the screen above — without it, popping back would show what
+    // the agent used to be and run that instead. Never mid-run: the pipeline
+    // in flight is the one already loaded.
+    ref.listen(agentsProvider, (_, next) {
+      if (next.isLoading || state.isRunning) return;
+      _agent.open(widget.agentId);
+    });
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -163,10 +173,11 @@ class _Header extends ConsumerWidget {
 
 /// Where an agent is edited from.
 ///
-/// A built-in offers only `Duplicate`: its file is in the bundle, where
-/// nothing on the device can change it. The copy is what gets edited — and is
-/// the quickest way to see how a shipped agent is put together, or to break
-/// one deliberately and watch what the model does.
+/// Every agent can be edited, built-in or not. A built-in's own file is in the
+/// bundle where nothing on the device can touch it, so `Edit agent` saves a
+/// copy under the same id that shadows it — same card, same name, same run
+/// history — and `Reset to built-in`, in the builder, throws that copy away.
+/// `Duplicate` is still there for keeping the original alongside a variant.
 class _Menu extends StatelessWidget {
   const _Menu({required this.agent});
 
@@ -181,8 +192,7 @@ class _Menu extends StatelessWidget {
       _ => context.push(Routes.agentCopyOf(agent.id)),
     },
     itemBuilder: (context) => <PopupMenuEntry<String>>[
-      if (!agent.isBuiltIn)
-        const PopupMenuItem<String>(value: 'edit', child: Text('Edit agent')),
+      const PopupMenuItem<String>(value: 'edit', child: Text('Edit agent')),
       const PopupMenuItem<String>(
         value: 'copy',
         child: Text('Duplicate as a new agent'),

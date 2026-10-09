@@ -44,7 +44,6 @@ import '../../domain/services/model_downloader.dart';
 import '../../domain/services/nobodywho_llm_service.dart';
 import '../../domain/services/open_meteo_weather_service.dart';
 import '../../domain/services/tavily_web_search_service.dart';
-import '../../domain/tools/tool_definition.dart';
 import '../../domain/tools/document_tools.dart';
 import '../../domain/tools/tool_registry.dart';
 import '../../domain/tools/web_tools.dart';
@@ -158,19 +157,11 @@ final webCrawlerServiceProvider = Provider<FirecrawlWebCrawlerService>(
   ),
 );
 
-/// What a model is allowed to call. Backend-neutral: the agent flow turns
-/// these into `nobodywho` tools with `toNobodyWhoTools` at the point it hands
-/// them to a chat, which keeps the native dependency out of everything else.
-///
-/// The list is not filtered by whether a key is set. A tool whose key is
-/// missing answers with a sentence saying so, which tells the model something
-/// it can relay — whereas silently withholding the tool leaves it to invent an
-/// answer instead.
-final webToolsProvider = Provider<List<ToolDefinition>>(
-  (ref) => webTools(
-    search: ref.watch(webSearchServiceProvider),
-    crawler: ref.watch(webCrawlerServiceProvider),
-  ),
+/// What the current agent run wants from the web: how many results, and how
+/// much of each one and of a fetched page to keep. Written by the run before
+/// it starts, for the reason given on [WebSearchSettings].
+final webSearchSettingsProvider = Provider<WebSearchSettings>(
+  (ref) => WebSearchSettings(),
 );
 
 final openMeteoApiClientProvider = Provider<OpenMeteoApiClient>(
@@ -226,6 +217,7 @@ final toolRegistryProvider = Provider<ToolRegistry>(
     documents: ref.watch(documentIndexRepositoryProvider),
     embedder: ref.watch(embeddingServiceProvider),
     retrieval: ref.watch(retrievalSettingsProvider),
+    web: ref.watch(webSearchSettingsProvider),
     // Read per call rather than captured, so downloading an embedding model
     // unblocks the agent without rebuilding the registry.
     hasEmbeddingModel: () async =>

@@ -10,6 +10,7 @@ import '../widgets/agent_icon.dart';
 import '../widgets/builder/answer_card.dart';
 import '../widgets/builder/inputs_editor.dart';
 import '../widgets/builder/labelled_field.dart';
+import '../widgets/builder/limits_card.dart';
 import '../widgets/builder/pipeline_step_card.dart';
 import '../widgets/builder/raw_agent_editor.dart';
 import '../widgets/mono_label.dart';
@@ -67,6 +68,9 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
               ),
               child: _Header(
                 isEditing: widget.agentId != null && !widget.duplicate,
+                isBuiltIn: ref
+                    .watch(agentBuilderViewModelProvider.notifier)
+                    .isBuiltInOverride,
                 onDelete: _confirmDelete,
                 onEditJson: _editJson,
               ),
@@ -133,14 +137,27 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
     if ((saved ?? false) && mounted) await navigator.maybePop();
   }
 
+  /// Deleting an agent the user built, or resetting an edited built-in.
+  ///
+  /// The same button, because they are the same removal underneath — a
+  /// built-in's file lives in the bundle, so throwing away the override is
+  /// what brings it back. Only the wording and how far to pop differ.
   Future<void> _confirmDelete() async {
+    final builder = ref.read(agentBuilderViewModelProvider.notifier);
+    final isBuiltIn = builder.isBuiltInOverride;
     final navigator = Navigator.of(context);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this agent?'),
-        content: const Text(
-          'Its file is removed. Runs already recorded are kept.',
+        title: Text(
+          isBuiltIn ? 'Reset to the built-in?' : 'Delete this agent?',
+        ),
+        content: Text(
+          isBuiltIn
+              ? 'Your changes are thrown away and the version shipped with '
+                    'the app comes back. Runs already recorded are kept.'
+              : 'Its file is removed. Runs already recorded are kept.',
         ),
         actions: <Widget>[
           TextButton(
@@ -152,19 +169,21 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
             style: TextButton.styleFrom(
               foregroundColor: context.palette.danger,
             ),
-            child: const Text('Delete'),
+            child: Text(isBuiltIn ? 'Reset' : 'Delete'),
           ),
         ],
       ),
     );
     if (!(confirmed ?? false)) return;
 
-    await ref.read(agentBuilderViewModelProvider.notifier).delete();
+    isBuiltIn ? await builder.reset() : await builder.delete();
     if (!mounted) return;
-    // Twice: out of the builder, and off the detail screen of an agent that
-    // no longer exists.
+
+    // Once for a reset: the agent is still there, and the detail screen
+    // behind this one will reopen it. Twice for a deletion, which also leaves
+    // the detail screen of an agent that no longer exists.
     await navigator.maybePop();
-    if (mounted) await navigator.maybePop();
+    if (!isBuiltIn && mounted) await navigator.maybePop();
   }
 }
 
@@ -218,6 +237,16 @@ class _Form extends ConsumerWidget {
           title: 'Pipeline',
           child: _Pipeline(draft: draft),
         ),
+        // After the pipeline, not before it: which half of the card applies
+        // depends on the tools the steps name, so there is nothing to show
+        // until they have been picked.
+        if (draft.usesWebTools || draft.usesDocumentTools) ...<Widget>[
+          SizedBox(height: metrics.gapXl),
+          BuilderSection(
+            title: 'Limits',
+            child: LimitsCard(draft: draft),
+          ),
+        ],
         SizedBox(height: metrics.gapMd),
         AnswerCard(
           answer: draft.answer,
@@ -367,11 +396,18 @@ class _IconRow extends StatelessWidget {
 class _Header extends StatelessWidget {
   const _Header({
     required this.isEditing,
+    required this.isBuiltIn,
     required this.onDelete,
     required this.onEditJson,
   });
 
   final bool isEditing;
+
+  /// Whether this is an edit of an agent that ships with the app, in which
+  /// case the destructive action puts the shipped version back rather than
+  /// taking the agent away.
+  final bool isBuiltIn;
+
   final VoidCallback onDelete;
   final VoidCallback onEditJson;
 
@@ -414,9 +450,9 @@ class _Header extends StatelessWidget {
               child: Text('Edit as JSON'),
             ),
             if (isEditing)
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'delete',
-                child: Text('Delete agent'),
+                child: Text(isBuiltIn ? 'Reset to built-in' : 'Delete agent'),
               ),
           ],
         ),

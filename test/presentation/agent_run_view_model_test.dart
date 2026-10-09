@@ -488,6 +488,73 @@ void main() {
       check(settings.embeddingModel?.name).equals('BGE Small EN v1.5');
     });
 
+    test("the agent's own limits reach both sets of tools", () async {
+      final container = containerWith(
+        template: fakeAgentTemplate(
+          limits: const AgentLimits(
+            webResults: 2,
+            webSnippetChars: 150,
+            webPageChars: 900,
+            passages: 6,
+          ),
+        ),
+      );
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      final web = container.read(webSearchSettingsProvider);
+      check(web.maxResults).equals(2);
+      check(web.snippetLimit).equals(150);
+      check(web.pageLimit).equals(900);
+      // Set for every agent, not only one that retrieves: the holder outlives
+      // the run that wrote it.
+      check(container.read(retrievalSettingsProvider).topK).equals(6);
+    });
+
+    test("an agent with no limits does not inherit the last run's", () async {
+      final container = containerWith();
+      // What a previous run of a more generous agent left behind: the holders
+      // are built once and outlive any one run.
+      container
+          .read(webSearchSettingsProvider)
+          .apply(maxResults: 9, pageLimit: 18000);
+      container.read(retrievalSettingsProvider).apply(topK: 15);
+      await notifierOf(container).open('test_agent');
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      final web = container.read(webSearchSettingsProvider);
+      check(web.maxResults).equals(AgentLimits.defaultWebResults);
+      check(web.pageLimit).equals(AgentLimits.defaultWebPageChars);
+      check(container.read(retrievalSettingsProvider).topK)
+          .equals(AgentLimits.defaultPassages);
+    });
+
+    test('a chunk size on the agent reaches the ingestor', () async {
+      final file = await _writeDocument(
+        'report.txt',
+        List<String>.filled(300, 'word').join(' '),
+      );
+      final container = containerWith(
+        template: fakeDocumentAgent(
+          limits: const AgentLimits(chunkChars: 300, chunkOverlapChars: 40),
+        ),
+        models: <ModelDescriptor>[fakeInstalledModel(), fakeEmbeddingModel()],
+      );
+      await notifierOf(container).open('document_qna');
+      notifierOf(container).setValue('document', file);
+
+      await notifierOf(container).run();
+      await pumpEventQueue();
+
+      // Recorded on the document, which is what makes a later change to it
+      // re-index rather than answer from passages of the old length.
+      check(documents.stored.single.chunkChars).equals(300);
+    });
+
     test('with no file chosen it says so before loading anything', () async {
       final container = containerWith(
         template: fakeDocumentAgent(),

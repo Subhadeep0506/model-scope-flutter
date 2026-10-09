@@ -37,15 +37,21 @@ class DocumentIngestor {
   /// Indexes [path], reporting what it is doing as it goes.
   ///
   /// Does nothing when that exact file is already indexed under the same
-  /// embedding model — re-encoding a document the user picked twice would
-  /// cost tens of seconds to arrive at the same vectors.
+  /// embedding model and the same passage length — re-encoding a document the
+  /// user picked twice would cost tens of seconds to arrive at the same
+  /// vectors. Change either and it is encoded again, because the stored
+  /// passages are then the wrong ones.
   Stream<IngestProgress> ingest({
     required String path,
     required ModelDescriptor embeddingModel,
+    int chunkChars = kChunkSize,
+    int overlapChars = kChunkOverlap,
   }) async* {
     final docId = docIdFor(path);
     final existing = _index.documentOf(docId);
-    if (existing != null && existing.embedModelId == embeddingModel.id) {
+    if (existing != null &&
+        existing.embedModelId == embeddingModel.id &&
+        existing.chunkChars == chunkChars) {
       yield IngestProgress(
         'Already indexed: ${existing.title}, '
         '${existing.chunkCount} passages.',
@@ -57,7 +63,7 @@ class DocumentIngestor {
     yield const IngestProgress('Reading the document…');
     final text = await _extractor.extract(path);
 
-    final chunks = chunkText(text);
+    final chunks = chunkText(text, size: chunkChars, overlap: overlapChars);
     if (chunks.isEmpty) {
       throw const DocumentExtractionException(
         'That document held no text worth indexing.',
@@ -97,6 +103,7 @@ class DocumentIngestor {
           sourcePath: path,
           chunkCount: rows.length,
           embedModelId: embeddingModel.id,
+          chunkChars: chunkChars,
           ingestedAt: DateTime.now(),
         ),
         rows,

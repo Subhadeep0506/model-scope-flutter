@@ -6,6 +6,11 @@
   "description": "Reads a .txt, .md or PDF file, splits it into passages and encodes each one with an embedding model into a local vector database on this device. At run time it retrieves the passages closest in meaning to your question and answers from those alone. Nothing leaves the phone. Tests whether a small model can stay inside retrieved material instead of filling gaps from memory.",
   "icon": "document",
   "temperature": 0.3,
+  "limits": {
+    "chunk_chars": 700,
+    "chunk_overlap_chars": 120,
+    "passages": 4
+  },
   "system_prompt": "You are a careful reader answering questions about one document. Work only from the passages you are given - never from memory, and never from what the question seems to assume. Quote the document's own wording for anything specific. When the passages do not settle the question, say so plainly rather than guessing.",
   "inputs": [
     {
@@ -20,13 +25,6 @@
       "type": "text",
       "default": "What is this document about, and what does it conclude?",
       "required": true
-    },
-    {
-      "name": "top_k",
-      "label": "Passages to retrieve",
-      "type": "number",
-      "default": "4",
-      "required": false
     },
     {
       "name": "temperature",

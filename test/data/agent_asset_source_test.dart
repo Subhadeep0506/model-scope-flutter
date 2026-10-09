@@ -14,6 +14,7 @@ import 'package:model_scope_flutter/domain/services/open_meteo_weather_service.d
 import 'package:model_scope_flutter/domain/services/tavily_web_search_service.dart';
 import 'package:model_scope_flutter/data/repositories/document_index_repository.dart';
 import 'package:model_scope_flutter/domain/tools/document_tools.dart';
+import 'package:model_scope_flutter/domain/tools/web_tools.dart';
 import 'package:model_scope_flutter/domain/tools/tool_registry.dart';
 import 'package:model_scope_flutter/presentation/widgets/structured/structured_view.dart';
 
@@ -199,6 +200,7 @@ ToolRegistry _realRegistry(DocumentIndexRepository documents) {
     documents: documents,
     embedder: FakeEmbeddingService(),
     retrieval: RetrievalSettings(),
+    web: WebSearchSettings(),
     hasEmbeddingModel: () async => true,
   );
 }

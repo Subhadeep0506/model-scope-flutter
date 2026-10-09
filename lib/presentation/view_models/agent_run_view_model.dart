@@ -210,6 +210,8 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
       clearError: true,
     );
 
+    _applyLimits(agent.template);
+
     // Before the weights, not after: indexing loads the encoder, and holding
     // two models at once on a phone is how an allocation fails.
     if (!await _indexDocument(agent.template)) return;
@@ -229,6 +231,35 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
         .read(agentRunnerProvider)
         .run(agent.template, values: state.values, modelId: model.id)
         .listen(_onEvent, onError: _onStreamError);
+  }
+
+  /// Tells the tools how much text this agent may push at the model.
+  ///
+  /// Written every run, for every agent, rather than only when a limit is set:
+  /// the two holders outlive a run, so an agent carrying no limits of its own
+  /// would otherwise inherit whatever the last one left behind.
+  ///
+  /// The retrieval holder is also where the embedding model goes, which
+  /// `_indexDocument` fills in later — only it knows which model encoded the
+  /// passages, and vectors from two models are not comparable.
+  void _applyLimits(AgentTemplate template) {
+    final limits = template.limitsOrDefault;
+    ref
+        .read(webSearchSettingsProvider)
+        .apply(
+          maxResults: limits.webResults,
+          snippetLimit: limits.webSnippetChars,
+          pageLimit: limits.webPageChars,
+        );
+    ref
+        .read(retrievalSettingsProvider)
+        .apply(
+          // An input literally named `top_k` still wins, so a custom agent
+          // written before limits existed keeps working.
+          topK:
+              int.tryParse((state.values['top_k'] ?? '').trim()) ??
+              limits.passages,
+        );
   }
 
   /// Reads, chunks and encodes the document [template] takes, if it takes one.
@@ -257,12 +288,18 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
       return false;
     }
 
+    final limits = template.limitsOrDefault;
     state = state.copyWith(status: AgentRunStatus.indexing);
     try {
       await for (final progress
           in ref
               .read(documentIngestorProvider)
-              .ingest(path: path, embeddingModel: embedder)) {
+              .ingest(
+                path: path,
+                embeddingModel: embedder,
+                chunkChars: limits.chunkChars,
+                overlapChars: limits.chunkOverlapChars,
+              )) {
         // Left the screen mid-index: nothing left to report to.
         if (!ref.mounted || state.status != AgentRunStatus.indexing) {
           return false;
@@ -280,14 +317,10 @@ class AgentRunViewModel extends Notifier<AgentRunState> {
       return false;
     }
 
-    // Tells the retrieval tool how many passages to fetch and which model
-    // encoded them, since the tool was built long before this run existed.
-    ref
-        .read(retrievalSettingsProvider)
-        .apply(
-          topK: int.tryParse((state.values['top_k'] ?? '').trim()),
-          embeddingModel: embedder,
-        );
+    // Tells the retrieval tool which model encoded these passages, since the
+    // tool was built long before this run existed. How many to fetch was set
+    // by `_applyLimits` before any of this started.
+    ref.read(retrievalSettingsProvider).apply(embeddingModel: embedder);
     // So the Settings card shows what was just indexed.
     ref.read(documentIndexProvider.notifier).refresh();
 

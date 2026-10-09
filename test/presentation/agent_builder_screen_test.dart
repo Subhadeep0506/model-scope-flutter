@@ -331,6 +331,112 @@ void main() {
 
       check(find.textContaining('no longer exists').evaluate()).isNotEmpty();
     });
+
+    testWidgets('a built-in is edited in place and offers a reset', (
+      tester,
+    ) async {
+      await pumpBuilder(
+        tester,
+        agentId: 'built_in',
+        seed: seedOf(fakeAgentTemplate(id: 'built_in'), builtIn: true),
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+
+      // The bundled file cannot be removed, so the destructive action puts
+      // the shipped version back rather than taking the agent away.
+      check(find.text('Reset to built-in').evaluate()).isNotEmpty();
+      check(find.text('Delete agent').evaluate()).isEmpty();
+
+      await tester.tap(find.text('Reset to built-in'));
+      await tester.pumpAndSettle();
+
+      check(find.textContaining('shipped with the app').evaluate())
+          .isNotEmpty();
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+
+      check(agents.deleted).deepEquals(<String>['built_in']);
+    });
+
+    testWidgets('an agent of your own still offers Delete', (tester) async {
+      await pumpBuilder(
+        tester,
+        agentId: 'mine',
+        seed: seedOf(fakeAgentTemplate(id: 'mine')),
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+
+      check(find.text('Delete agent').evaluate()).isNotEmpty();
+      check(find.text('Reset to built-in').evaluate()).isEmpty();
+    });
+  });
+
+  group('the limits card', () {
+    testWidgets('shows the web rows only for an agent that searches', (
+      tester,
+    ) async {
+      await pumpBuilder(
+        tester,
+        agentId: 'mine',
+        seed: <Agent>[
+          Agent(template: fakeAgentTemplate(id: 'mine'), isBuiltIn: false),
+        ],
+      );
+
+      // The shipped fake searches the web and retrieves nothing.
+      check(find.text('WEB RESULTS').evaluate()).isNotEmpty();
+      check(find.text('CHARS PER PAGE').evaluate()).isNotEmpty();
+      check(find.text('PASSAGE LENGTH').evaluate()).isEmpty();
+    });
+
+    testWidgets('shows the document rows for one that retrieves', (
+      tester,
+    ) async {
+      await pumpBuilder(
+        tester,
+        agentId: 'document_qna',
+        seed: <Agent>[Agent(template: fakeDocumentAgent(), isBuiltIn: false)],
+      );
+
+      // This agent takes four inputs, so the card sits below the fold.
+      await tester.drag(find.byType(ListView).first, const Offset(0, -1200));
+      await tester.pumpAndSettle();
+
+      check(find.text('PASSAGE LENGTH').evaluate()).isNotEmpty();
+      check(find.text('PASSAGES RETRIEVED').evaluate()).isNotEmpty();
+      check(find.text('WEB RESULTS').evaluate()).isEmpty();
+    });
+
+    testWidgets('an agent reaching neither is shown no card at all', (
+      tester,
+    ) async {
+      await pumpBuilder(
+        tester,
+        agentId: 'mine',
+        seed: <Agent>[
+          Agent(
+            template: fakeAgentTemplate(
+              id: 'mine',
+              pipeline: const <PipelineStep>[
+                PipelineStep(
+                  id: 'think',
+                  kind: StepKind.reason,
+                  prompt: 'Consider it.',
+                ),
+              ],
+            ),
+            isBuiltIn: false,
+          ),
+        ],
+      );
+
+      // Six sliders controlling nothing would be worse than none.
+      check(find.text('Limits').evaluate()).isEmpty();
+    });
   });
 
   testWidgets('lays out without overflow at 200% text scale', (tester) async {

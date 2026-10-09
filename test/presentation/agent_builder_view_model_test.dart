@@ -143,6 +143,72 @@ void main() {
 
       check(container.read(agentBuilderViewModelProvider)).isA<AsyncError>();
     });
+
+    test('a built-in is saved under its own id, shadowing it', () async {
+      final container = containerWith(
+        seed: <Agent>[
+          Agent(template: fakeAgentTemplate(id: 'web_answer'), isBuiltIn: true),
+        ],
+      );
+      final vm = notifierOf(container);
+
+      await vm.open(agentId: 'web_answer', duplicate: false);
+      vm.setName('My web answer');
+      await vm.save();
+
+      // Not a copy under a minted id: the same id, so the card, the name and
+      // the run history stay where they are and the user's version is what
+      // runs.
+      check(vm.mode).equals(BuilderMode.edit);
+      check(agents.saved.single.id).equals('web_answer');
+      check(agents.saved.single.name).equals('My web answer');
+    });
+
+    test(
+      'editing a built-in offers a reset, editing your own does not',
+      () async {
+        final container = containerWith(
+          seed: <Agent>[
+            Agent(template: fakeAgentTemplate(id: 'shipped'), isBuiltIn: true),
+            Agent(template: fakeAgentTemplate(id: 'mine'), isBuiltIn: false),
+          ],
+        );
+        final vm = notifierOf(container);
+
+        await vm.open(agentId: 'shipped', duplicate: false);
+        check(vm.isBuiltInOverride).isTrue();
+
+        await vm.open(agentId: 'mine', duplicate: false);
+        check(vm.isBuiltInOverride).isFalse();
+
+        // A copy of a built-in is a new agent, not an override of one.
+        await vm.open(agentId: 'shipped', duplicate: true);
+        check(vm.isBuiltInOverride).isFalse();
+      },
+    );
+
+    test(
+      'resetting removes the file, so the bundled one loads again',
+      () async {
+        final container = containerWith(
+          seed: <Agent>[
+            Agent(
+              template: fakeAgentTemplate(id: 'web_answer'),
+              isBuiltIn: true,
+              isEdited: true,
+            ),
+          ],
+        );
+        final vm = notifierOf(container);
+        await vm.open(agentId: 'web_answer', duplicate: false);
+
+        await vm.reset();
+
+        // Nothing can touch the bundle, so dropping the override is the whole
+        // of putting the shipped agent back.
+        check(agents.deleted).deepEquals(<String>['web_answer']);
+      },
+    );
   });
 
   group('duplicating', () {
@@ -585,6 +651,7 @@ void main() {
           },
         ),
         temperature: 0.45,
+        limits: const AgentLimits(webResults: 6, chunkChars: 1200),
         createdAt: DateTime(2026, 10, 1),
       );
 
@@ -608,6 +675,62 @@ void main() {
       check(back.answer.schema)
           .isNotNull()
           .deepEquals(template.answer.schema ?? <String, dynamic>{});
+      check(back.limitsOrDefault.webResults).equals(6);
+      check(back.limitsOrDefault.chunkChars).equals(1200);
+    });
+  });
+
+  group('limits', () {
+    test('a new agent starts at the defaults', () async {
+      final container = containerWith();
+      await notifierOf(container).open(agentId: null, duplicate: false);
+
+      check(draftOf(container).limits.webResults)
+          .equals(AgentLimits.defaultWebResults);
+    });
+
+    test('what the sliders set is what gets saved', () async {
+      final container = containerWith();
+      final vm = notifierOf(container);
+      await vm.open(agentId: null, duplicate: false);
+      fillBasics(container);
+
+      vm.setWebResults(7);
+      vm.setWebSnippetChars(240);
+      vm.setWebPageChars(1500);
+      vm.setChunkChars(900);
+      vm.setChunkOverlapChars(60);
+      vm.setPassages(8);
+      await vm.save();
+
+      final limits = agents.saved.single.limitsOrDefault;
+      check(limits.webResults).equals(7);
+      check(limits.webSnippetChars).equals(240);
+      check(limits.webPageChars).equals(1500);
+      check(limits.chunkChars).equals(900);
+      check(limits.chunkOverlapChars).equals(60);
+      check(limits.passages).equals(8);
+    });
+
+    test('only the half that applies is offered', () async {
+      final container = containerWith();
+      final vm = notifierOf(container);
+      await vm.open(agentId: null, duplicate: false);
+      vm.addStep();
+      final key = draftOf(container).steps.single.key;
+
+      vm.setStepTool(key, 'web_search');
+      check(draftOf(container).usesWebTools).isTrue();
+      check(draftOf(container).usesDocumentTools).isFalse();
+
+      vm.setStepTool(key, 'search_document');
+      check(draftOf(container).usesWebTools).isFalse();
+      check(draftOf(container).usesDocumentTools).isTrue();
+
+      // A tool left behind on a step switched to Reason is never called, so
+      // its limits are not worth showing either.
+      vm.setStepKind(key, StepKind.reason);
+      check(draftOf(container).usesDocumentTools).isFalse();
     });
   });
 }

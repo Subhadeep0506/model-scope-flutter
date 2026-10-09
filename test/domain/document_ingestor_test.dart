@@ -116,6 +116,44 @@ void main() {
     check(second.single.message).contains('Already indexed');
   });
 
+  test('a shorter passage length splits the document further', () async {
+    final path = await write(
+      'report.txt',
+      List<String>.filled(400, 'word').join(' '),
+    );
+
+    await ingestor
+        .ingest(path: path, embeddingModel: embeddingModel, chunkChars: 2000)
+        .toList();
+    final few = index.chunks.length;
+
+    await ingestor
+        .ingest(path: path, embeddingModel: embeddingModel, chunkChars: 400)
+        .toList();
+
+    check(index.chunks.length).isGreaterThan(few);
+    check(index.stored.single.chunkChars).equals(400);
+  });
+
+  test('a changed passage length forces a re-encode', () async {
+    final path = await write(
+      'a.txt',
+      List<String>.filled(200, 'word').join(' '),
+    );
+    await ingestor
+        .ingest(path: path, embeddingModel: embeddingModel, chunkChars: 700)
+        .toList();
+
+    final second = await ingestor
+        .ingest(path: path, embeddingModel: embeddingModel, chunkChars: 300)
+        .toList();
+
+    // Without this the setting would appear to do nothing: the stored
+    // passages are the old length, and the shortcut would hand them back.
+    check(embedder.loadCalls).equals(2);
+    check(second.last.message).contains('Indexed a.txt');
+  });
+
   test('a different embedding model forces a re-encode', () async {
     final path = await write('a.txt', 'Something short.');
     await run(path);
