@@ -7,10 +7,6 @@ import '../../data/models/relative_time.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One row under `RUN HISTORY`: what the run said, what ran it, and when.
-///
-/// Tapping opens the saved trace and output, which is how two models are
-/// compared on the same agent after the fact.
 class RunHistoryCard extends StatelessWidget {
   const RunHistoryCard({
     super.key,

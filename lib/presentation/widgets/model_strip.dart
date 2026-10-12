@@ -7,8 +7,6 @@ import 'icon_tile.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// The bar under the chat header: which model is answering, its quantisation,
-/// and the current temperature. Tapping it opens the Loaded models sheet.
 class ModelStrip extends StatelessWidget {
   const ModelStrip({
     super.key,
@@ -17,7 +15,6 @@ class ModelStrip extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Null before anything has been installed.
   final ModelDescriptor? model;
 
   final double temperature;

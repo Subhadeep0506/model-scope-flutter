@@ -9,12 +9,6 @@ import '../../view_models/agent_builder_state.dart';
 import '../labelled_slider.dart';
 import '../section_card.dart';
 
-/// How much text one run of this agent may push at the model.
-///
-/// Only the half that applies is drawn: the web rows need a step that searches
-/// or fetches a page, the document rows a step that retrieves. An agent that
-/// does neither gets no card at all, because six sliders controlling nothing
-/// is worse than none.
 class LimitsCard extends ConsumerWidget {
   const LimitsCard({super.key, required this.draft});
 
@@ -84,8 +78,7 @@ class LimitsCard extends ConsumerWidget {
             _Row(
               label: 'PASSAGE OVERLAP',
               value: limits.chunkOverlapChars,
-              // Never more than half a passage: the chunker halves it anyway,
-              // so a slider that went higher would appear to do nothing.
+
               range: (
                 AgentLimits.chunkOverlapCharsRange.$1,
                 _overlapCeiling(limits.chunkChars),
@@ -113,10 +106,6 @@ class LimitsCard extends ConsumerWidget {
   }
 }
 
-/// One slider, in whole steps, writing to the draft as it moves.
-///
-/// Unlike the Runtime defaults card there is no local copy held while a thumb
-/// is dragging: committing here costs a redraw, not a model reload.
 class _Row extends StatelessWidget {
   const _Row({
     required this.label,
@@ -130,7 +119,6 @@ class _Row extends StatelessWidget {
   final int value;
   final (int, int) range;
 
-  /// How far one notch moves, which also decides the division count.
   final int step;
 
   final ValueChanged<int> onChanged;

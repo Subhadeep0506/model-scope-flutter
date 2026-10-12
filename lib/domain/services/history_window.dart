@@ -18,15 +18,6 @@ List<ChatMessage> historyWindow(List<ChatMessage> messages, int turns) {
 }
 
 /// [message]'s text with a line naming each of its images in front of it.
-///
-/// Replaying a transcript re-feeds it as text, so an image that was sent on an
-/// earlier turn is named rather than shown again: a second pass through the
-/// projector would cost hundreds of tokens of a context the user has budgeted
-/// in turns, and would fail outright if the file had since been deleted.
-///
-/// Kept out of [historyWindow] on purpose. That function's output is compared
-/// against the stored text by [needsHistoryReseat], so marking it up there
-/// would force a reseat on every turn of a conversation holding images.
 String withImageMarkers(ChatMessage message) {
   if (message.imagePaths.isEmpty) return message.text;
   final markers = message.imagePaths.map((path) => '[image: ${_nameOf(path)}]');

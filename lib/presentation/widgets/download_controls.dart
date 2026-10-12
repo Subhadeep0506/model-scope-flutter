@@ -6,9 +6,6 @@ import '../../data/models/download_progress.dart';
 import 'mono_label.dart';
 import 'square_icon_button.dart';
 
-/// The progress bar and transport controls shown under a file row while its
-/// download is live. The transfer belongs to the operating system and can be
-/// suspended, so the row offers pause, resume and cancel.
 class DownloadControls extends StatelessWidget {
   const DownloadControls({
     super.key,
@@ -24,7 +21,6 @@ class DownloadControls extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onCancel;
 
-  /// Clears a finished or failed row, returning it to its download button.
   final VoidCallback onDismiss;
 
   @override
@@ -58,8 +54,6 @@ class DownloadControls extends StatelessWidget {
     );
   }
 
-  /// Bar value, caption and colour for each state. A null value leaves the bar
-  /// indeterminate, which is the honest rendering of a queued transfer.
   (double?, String, Color) _appearance(AppPalette palette) =>
       switch (progress) {
         DownloadQueued() => (null, 'queued', palette.muted),

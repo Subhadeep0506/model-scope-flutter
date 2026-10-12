@@ -7,24 +7,12 @@ import 'tool_definition.dart';
 
 /// How many passages retrieval returns by default.
 const int kDefaultTopK = 4;
-
-/// How long a passage may be before the tool trims it, in characters. Four
-/// whole chunks plus the question has to fit a phone-sized context.
 const int kPassageLimit = 900;
 
 /// What the current run wants from retrieval.
-///
-/// Held in one mutable object the run writes before it starts, because a tool
-/// is built once in the registry and knows nothing about the run calling it —
-/// the same indirection the web tools use to read an API key per call rather
-/// than capture one.
 class RetrievalSettings {
   RetrievalSettings({this.topK = kDefaultTopK, this.embeddingModel});
-
   int topK;
-
-  /// Which model encodes the query. Must be the one that encoded the
-  /// document: vectors from two different models are not comparable.
   ModelDescriptor? embeddingModel;
 
   void apply({int? topK, ModelDescriptor? embeddingModel}) {
@@ -61,8 +49,6 @@ ToolDefinition searchDocumentTool({
       final hits = index.search(vectors.first, topK: settings.topK);
       return formatPassages(hits, query: trimmed, passageLimit: passageLimit);
     } on EmbeddingException catch (error) {
-      // Never thrown onward: whatever comes back goes straight to the model,
-      // and a sentence it can relay beats a crashed run.
       return 'The document search failed. $error';
     } finally {
       await embedder.dispose();

@@ -10,9 +10,6 @@ import '../../data/models/api_keys.dart';
 import 'icon_tile.dart';
 import 'section_card.dart';
 
-/// One credential: a labelled, obscured field with a reveal toggle and Verify.
-/// Written to the secure store after a typing pause, so pasting a token is one
-/// write and not forty.
 class ApiKeyCard extends ConsumerStatefulWidget {
   const ApiKeyCard({super.key, required this.kind});
 
@@ -32,7 +29,6 @@ class _ApiKeyCardState extends ConsumerState<ApiKeyCard> {
 
   @override
   void deactivate() {
-    // Flush while `ref` is still usable, so leaving the tab keeps the key.
     _flush();
     super.deactivate();
   }
@@ -58,7 +54,6 @@ class _ApiKeyCardState extends ConsumerState<ApiKeyCard> {
     );
   }
 
-  /// Saves immediately: verifying what is on screen, not what was last typed.
   Future<void> _verify() async {
     _flush();
     await ref.read(apiKeysViewModelProvider.notifier).verify(widget.kind);

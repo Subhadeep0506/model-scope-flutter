@@ -10,7 +10,6 @@ import 'icon_tile.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One row of the Chats list.
 class SessionCard extends ConsumerWidget {
   const SessionCard({
     super.key,
@@ -19,7 +18,6 @@ class SessionCard extends ConsumerWidget {
     required this.onDelete,
   });
 
-  /// Matches the mockup: `Sep 30, 2026, 12:08 PM`.
   static final DateFormat _stamp = DateFormat('MMM d, y, h:mm a');
 
   final ChatSession session;
@@ -30,8 +28,7 @@ class SessionCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final metrics = context.metrics;
-    // The model may since have been removed in Settings. The session is still
-    // readable, so it lists — it just cannot name what produced it.
+
     final model = ref.watch(installedModelProvider(session.modelId));
 
     return SectionCard(

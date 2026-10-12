@@ -3,17 +3,6 @@ import '../../data/repositories/hugging_face_repository.dart';
 import '../../data/sources/firecrawl_api_client.dart';
 import '../../data/sources/tavily_api_client.dart';
 
-/// Checks a credential against the service it belongs to, and says what it
-/// found.
-///
-/// Every endpoint used here reports on the key rather than doing work with it,
-/// so pressing Verify costs no credits on any of the three: Hugging Face's
-/// `whoami` names the account, Tavily's `/usage` and Firecrawl's
-/// `/team/credit-usage` read the billing cycle. Checking a search key by
-/// searching would bill the user for pressing a button.
-///
-/// Throws the service's own exception when the key is bad, whose message is
-/// already written to be shown as-is.
 class ApiKeyVerifier {
   const ApiKeyVerifier(this._huggingFace, this._tavily, this._firecrawl);
 

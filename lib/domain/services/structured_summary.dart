@@ -3,14 +3,6 @@ import 'dart:convert';
 import '../../data/models/json_read.dart';
 
 /// The one line RUN HISTORY prints for a structured run.
-///
-/// Pure Dart with no Flutter in sight, because it is called from the runner
-/// and stored on the run record — the widget that draws the same data lives in
-/// the presentation layer and never meets this. The two are keyed by the same
-/// view names, which is the only thing holding them together.
-///
-/// Returns null when [output] is not JSON or the view has nothing worth
-/// saying, and the run record falls back to the first line of the output.
 String? summariseStructured(String? view, String output) {
   final data = decodeStructured(output);
   if (data == null) return null;
@@ -23,9 +15,6 @@ String? summariseStructured(String? view, String output) {
 }
 
 /// [output] as a JSON object, or null when it is not one.
-///
-/// Shared with the widgets, so what the history line summarises and what the
-/// screen draws can never disagree about whether a run was structured.
 Map<String, dynamic>? decodeStructured(String output) {
   final trimmed = output.trim();
   if (!trimmed.startsWith('{')) return null;

@@ -1,8 +1,5 @@
 import '../../data/models/catalog_model.dart';
 
-/// What the Model catalog screen is showing: the whole catalog, with the
-/// search text and capability filter applied on read. No paging or cursor —
-/// the list ships with the app, so narrowing it is not a request.
 class CatalogState {
   const CatalogState({
     this.models = const <CatalogModel>[],
@@ -12,8 +9,6 @@ class CatalogState {
 
   final List<CatalogModel> models;
   final String query;
-
-  /// The selected filter chip, or null for `All`.
   final ModelCapability? capability;
 
   List<CatalogModel> get visible {
@@ -26,14 +21,11 @@ class CatalogState {
     ];
   }
 
-  /// `6 results`, as drawn opposite the `Available models` heading.
   String get resultsLabel {
     final count = visible.length;
     return count == 1 ? '1 result' : '$count results';
   }
 
-  /// `6 REPOSITORIES · GGUF`, the overline above the title. Counts the whole
-  /// catalog rather than the filtered view — it describes what the app offers.
   String get overline {
     final count = models.length;
     return '${count == 1 ? '1 REPOSITORY' : '$count REPOSITORIES'} · GGUF';

@@ -12,9 +12,6 @@ import 'mono_label.dart';
 import 'section_card.dart';
 import 'sheet_scaffold.dart';
 
-/// Switches which installed model answers. The throughput figure is the
-/// measured rate of this session's last reply, not a headline number, and is
-/// omitted until there is one.
 class LoadedModelsSheet extends ConsumerWidget {
   const LoadedModelsSheet({super.key});
 
@@ -50,8 +47,6 @@ class LoadedModelsSheet extends ConsumerWidget {
     );
   }
 
-  /// Switching releases the loaded weights; the chat reloads on its next
-  /// prepare, so the sheet closes immediately rather than waiting.
   static Future<void> _select(
     BuildContext context,
     WidgetRef ref,

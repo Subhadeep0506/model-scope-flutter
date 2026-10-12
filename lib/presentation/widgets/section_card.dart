@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The white, hairline-outlined, 10dp-radius container the mockups repeat for
-/// the filter block, each session row and each row of the models sheet.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -45,8 +43,6 @@ class SectionCard extends StatelessWidget {
         child: height == null
             ? body
             : ConstrainedBox(
-                // A minimum rather than a fixed height, so the row still grows
-                // when the system text scale does.
                 constraints: BoxConstraints(minHeight: height ?? 0),
                 child: body,
               ),

@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The soft-filled search box on the Chats screen and the Model catalog.
-/// Unlike the outlined fields elsewhere it shows no hairline until focused,
-/// which is how both mockups draw it.
 class SearchField extends StatelessWidget {
   const SearchField({
     super.key,

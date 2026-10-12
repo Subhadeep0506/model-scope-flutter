@@ -15,19 +15,12 @@ class FirecrawlWebCrawlerService {
     this.onlyMainContent = true,
     this.timeout = const Duration(seconds: 60),
   });
-
   final FirecrawlApiClient _client;
-
-  /// Returns the stored Firecrawl key, or an empty string when none is set.
   final Future<String> Function() _apiKey;
-
-  /// Strip navigation, footers and sidebars. On by default: the boilerplate of
-  /// a typical page is most of its bytes and none of its meaning.
   final bool onlyMainContent;
 
   /// How long Firecrawl may spend on one page before giving up.
   final Duration timeout;
-
   static const String _logName = 'FirecrawlWebCrawlerService';
 
   /// Whether a scrape can be run at all.

@@ -110,11 +110,6 @@ class AgentRunner {
           yield event;
         }
       }
-      // `await for` rather than `yield*`, which forwards an error straight to
-      // whoever is listening and past the catch below. An answer step that
-      // failed used to take the whole stream down with it, so the run was
-      // never recorded and the partial answer was lost — unlike a pipeline
-      // step failing, which has always been caught here.
       await for (final event in _runAnswer(template, scope, trace)) {
         yield event;
       }
@@ -269,9 +264,7 @@ class AgentRunner {
       reads: reads,
       scope: scope,
     );
-    // Constrained before the ask and lifted after it, whatever happens. An
-    // agent with no schema is left alone entirely rather than handed a null:
-    // the sampler it was loaded with is already the one it wants.
+    
     final schema = template.answer.schema;
     final constrained = schema != null && await _constrain(schema);
     if (schema != null && !constrained) {
@@ -285,10 +278,6 @@ class AgentRunner {
     yield _log('step', 'answer · no tools${constrained ? ' · schema' : ''}');
     yield _log('prompt', prompt);
 
-    // Caught and held rather than guarded by `finally`: the tokens have to be
-    // yielded as they arrive, and awaiting inside a `finally` that wraps a
-    // `yield` is not somewhere to put work that must happen. The constraint
-    // is lifted first, then the failure travels on unchanged.
     final buffer = StringBuffer();
     Object? failure;
     StackTrace? failureTrace;
@@ -322,12 +311,6 @@ class AgentRunner {
 
   /// Applies [schema] to the next reply, or lifts the constraint when it is
   /// null. Returns whether a constraint is now in force.
-  ///
-  /// A schema the backend will not compile loses the shape, not the run: the
-  /// model is asked the same question unconstrained and whatever it writes is
-  /// shown as prose. Which schemas llguidance accepts is not knowable from
-  /// here, and an agent that cannot answer at all is worse than one that
-  /// answers in the wrong shape.
   Future<bool> _constrain(Map<String, dynamic>? schema) async {
     try {
       await _llm.setResponseSchema(schema);
@@ -433,8 +416,6 @@ class AgentRunner {
       trace: List<TraceEntry>.unmodifiable(trace),
       output: output,
       error: error,
-      // Both recorded rather than read back off the template later: editing
-      // an agent must not change what its finished runs say they did.
       view: template.answer.isStructured ? (view ?? '') : null,
       summaryLine: summariseStructured(view, output),
     );

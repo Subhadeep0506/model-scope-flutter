@@ -9,8 +9,6 @@ import 'filter_dropdown.dart';
 import 'search_field.dart';
 import 'section_card.dart';
 
-/// Search field plus the model and time dropdowns, bound straight to
-/// [sessionFilterProvider].
 class SessionFilterBar extends ConsumerStatefulWidget {
   const SessionFilterBar({super.key});
 
@@ -72,8 +70,6 @@ class _SessionFilterBarState extends ConsumerState<SessionFilterBar> {
     );
   }
 
-  /// Only installed models are offered. Filtering by one that has been removed
-  /// would be a dropdown entry that always returns nothing.
   static List<FilterOption<String?>> _modelOptions(WidgetRef ref) {
     final library = ref.watch(modelLibraryViewModelProvider).value;
     return <FilterOption<String?>>[

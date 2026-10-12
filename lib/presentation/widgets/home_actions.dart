@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The pair of buttons that close the Home screen. Both are real routes: Run
-/// agent lands on the Agent tab's placeholder, which explains itself, rather
-/// than being a dead button here.
 class HomeActions extends StatelessWidget {
   const HomeActions({
     super.key,

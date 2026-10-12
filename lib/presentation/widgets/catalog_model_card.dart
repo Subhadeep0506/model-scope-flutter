@@ -13,9 +13,6 @@ import 'mono_chip.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One row of the Model catalog: everything the manifest knows, plus a stats
-/// line fetched from Hugging Face. Nothing depends on the stats — if the Hub
-/// is slow or unreachable the row renders without them.
 class CatalogModelCard extends ConsumerWidget {
   const CatalogModelCard({super.key, required this.model, required this.onTap});
 
@@ -123,8 +120,6 @@ class _Tags extends ConsumerWidget {
   }
 }
 
-/// The filled green `Installed` tag. Filled rather than outlined so it reads
-/// as a state already reached, not another thing to choose.
 class _InstalledBadge extends StatelessWidget {
   const _InstalledBadge();
 
@@ -158,7 +153,6 @@ class _InstalledBadge extends StatelessWidget {
   }
 }
 
-/// `182k · 412 · 3 files`, once the Hub answers.
 class _Stats extends ConsumerWidget {
   const _Stats({required this.repoId});
 

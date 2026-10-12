@@ -18,17 +18,9 @@ import '../widgets/section_card.dart';
 import '../widgets/square_icon_button.dart';
 
 /// The pipeline builder: a whole agent on one screen.
-///
-/// Drives [AgentBuilderViewModel] and draws what it holds, deciding nothing
-/// itself. Opened three ways — empty, on an existing custom agent, or on a
-/// copy of a built-in — which the routes pick between.
 class AgentBuilderScreen extends ConsumerStatefulWidget {
   const AgentBuilderScreen({super.key, this.agentId, this.duplicate = false});
-
-  /// Null for a new agent.
   final String? agentId;
-
-  /// Whether to open [agentId] as a copy rather than to edit it.
   final bool duplicate;
 
   @override
@@ -39,8 +31,6 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
   @override
   void initState() {
     super.initState();
-    // After the first frame, so the notifier is not written to while the
-    // widget tree is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
           .read(agentBuilderViewModelProvider.notifier)
@@ -92,9 +82,6 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
   }
 
   Future<void> _save() async {
-    // `Navigator`, not `GoRouter`: this screen does not care how it was
-    // pushed, and reaching for the router would make it unusable anywhere
-    // one is not above it.
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final outcome = await ref
@@ -114,10 +101,6 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
   }
 
   /// Everything wrong with the agent, in the validator's own words.
-  ///
-  /// A sheet rather than inline errors: the validator already writes a
-  /// sentence per problem, and showing them where they are written keeps the
-  /// builder and the bench saying the same thing about the same agent.
   Future<void> _showProblems(List<String> problems) => showModalBottomSheet(
     context: context,
     backgroundColor: context.palette.surface,
@@ -132,16 +115,10 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
     final saved = await navigator.push<bool>(
       MaterialPageRoute<bool>(builder: (_) => RawAgentEditor(draft: draft)),
     );
-    // Saved from the JSON editor, so the form behind it is stale — close it
-    // rather than leave it showing what the agent used to be.
     if ((saved ?? false) && mounted) await navigator.maybePop();
   }
 
   /// Deleting an agent the user built, or resetting an edited built-in.
-  ///
-  /// The same button, because they are the same removal underneath — a
-  /// built-in's file lives in the bundle, so throwing away the override is
-  /// what brings it back. Only the wording and how far to pop differ.
   Future<void> _confirmDelete() async {
     final builder = ref.read(agentBuilderViewModelProvider.notifier);
     final isBuiltIn = builder.isBuiltInOverride;
@@ -178,10 +155,6 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
 
     isBuiltIn ? await builder.reset() : await builder.delete();
     if (!mounted) return;
-
-    // Once for a reset: the agent is still there, and the detail screen
-    // behind this one will reopen it. Twice for a deletion, which also leaves
-    // the detail screen of an agent that no longer exists.
     await navigator.maybePop();
     if (!isBuiltIn && mounted) await navigator.maybePop();
   }
@@ -189,7 +162,6 @@ class _AgentBuilderScreenState extends ConsumerState<AgentBuilderScreen> {
 
 class _Form extends ConsumerWidget {
   const _Form({required this.draft});
-
   final AgentDraft draft;
 
   @override
@@ -237,9 +209,6 @@ class _Form extends ConsumerWidget {
           title: 'Pipeline',
           child: _Pipeline(draft: draft),
         ),
-        // After the pipeline, not before it: which half of the card applies
-        // depends on the tools the steps name, so there is nothing to show
-        // until they have been picked.
         if (draft.usesWebTools || draft.usesDocumentTools) ...<Widget>[
           SizedBox(height: metrics.gapXl),
           BuilderSection(
@@ -250,7 +219,6 @@ class _Form extends ConsumerWidget {
         SizedBox(height: metrics.gapMd),
         AnswerCard(
           answer: draft.answer,
-          // The answer runs last, so it may read everything.
           available: draft.referencesBefore(draft.steps.length),
         ),
       ],
@@ -260,7 +228,6 @@ class _Form extends ConsumerWidget {
 
 class _Pipeline extends ConsumerWidget {
   const _Pipeline({required this.draft});
-
   final AgentDraft draft;
 
   @override
@@ -297,7 +264,6 @@ class _Pipeline extends ConsumerWidget {
 
 class _Basics extends ConsumerWidget {
   const _Basics({required this.draft});
-
   final AgentDraft draft;
 
   @override
@@ -334,13 +300,8 @@ class _Basics extends ConsumerWidget {
 }
 
 /// Every icon token the app can draw.
-///
-/// The mockups show six; this offers all of them, because an icon that is not
-/// on the list draws as the fallback robot and nothing on screen would say
-/// why.
 class _IconRow extends StatelessWidget {
   const _IconRow({required this.selected, required this.onSelected});
-
   final String selected;
   final ValueChanged<String> onSelected;
 
@@ -402,12 +363,7 @@ class _Header extends StatelessWidget {
   });
 
   final bool isEditing;
-
-  /// Whether this is an edit of an agent that ships with the app, in which
-  /// case the destructive action puts the shipped version back rather than
-  /// taking the agent away.
   final bool isBuiltIn;
-
   final VoidCallback onDelete;
   final VoidCallback onEditJson;
 
@@ -497,7 +453,6 @@ class _SaveBar extends ConsumerWidget {
 /// What stopped the agent being saved.
 class _ProblemSheet extends StatelessWidget {
   const _ProblemSheet({required this.problems});
-
   final List<String> problems;
 
   @override
@@ -549,7 +504,6 @@ class _ProblemSheet extends StatelessWidget {
 
 class _Note extends StatelessWidget {
   const _Note({required this.text});
-
   final String text;
 
   @override

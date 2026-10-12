@@ -6,11 +6,6 @@ import '../../data/models/agent_run.dart';
 import 'agent_bench_state.dart';
 
 /// Builds the Agent bench: the cards, and the three figures above them.
-///
-/// Reads the agents and the run history from [agentsProvider] and
-/// [agentRunsProvider] rather than the repositories directly, so that
-/// invalidating one provider after a run refreshes this screen and Home's
-/// figures together, with nothing to keep in step by hand.
 class AgentBenchViewModel extends AsyncNotifier<AgentBenchState> {
   @override
   Future<AgentBenchState> build() async {
@@ -21,9 +16,6 @@ class AgentBenchViewModel extends AsyncNotifier<AgentBenchState> {
 
     final listings = <AgentListing>[];
     for (final agent in agents) {
-      // Checked against the agent's own defaults, which is what the run button
-      // sends — so a card warns about a missing key or a missing model before
-      // the user opens it, rather than after they press Run.
       final availability = await validator.check(
         agent.template,
         hasModel: library.chatModels.isNotEmpty,

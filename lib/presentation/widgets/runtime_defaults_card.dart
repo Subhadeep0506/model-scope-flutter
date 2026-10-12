@@ -8,9 +8,6 @@ import '../../data/models/app_settings.dart';
 import 'labelled_slider.dart';
 import 'section_card.dart';
 
-/// Context length, CPU threads and GPU offload. Committing any of these
-/// releases the loaded model, so the sliders only write on `onChangeEnd` and
-/// track a local draft while a thumb is moving.
 class RuntimeDefaultsCard extends ConsumerStatefulWidget {
   const RuntimeDefaultsCard({super.key, required this.settings});
 
@@ -22,8 +19,6 @@ class RuntimeDefaultsCard extends ConsumerStatefulWidget {
 }
 
 class _RuntimeDefaultsCardState extends ConsumerState<RuntimeDefaultsCard> {
-  /// The slider's first slot means "let `nobodywho` count the cores", which is
-  /// a real choice and the app's default — not a thread count of zero.
   static const (double, double) _threadRange = (0, 16);
 
   AppSettings? _draft;
@@ -55,8 +50,7 @@ class _RuntimeDefaultsCardState extends ConsumerState<RuntimeDefaultsCard> {
             value: shown.contextLength.toDouble(),
             display: '${shown.contextLength}',
             range: asDoubles(AppSettings.contextLengthRange),
-            // 512-token steps across the range, matching how llama.cpp
-            // actually allocates the KV cache.
+
             divisions: 15,
             onChanged: (v) => _drag(shown.copyWith(contextLength: v.round())),
             onChangeEnd: (v) {
@@ -112,8 +106,6 @@ class _GpuSwitch extends StatelessWidget {
               Text('GPU acceleration', style: text.titleMedium),
               SizedBox(height: metrics.gapXs / 2),
               Text(
-                // The mockup's GPU LAYERS slider has no counterpart in
-                // nobodywho's API, which offers offload as all or nothing.
                 'Offload layers to the GPU when the device supports it',
                 style: text.bodySmall?.copyWith(color: palette.muted),
               ),
@@ -121,7 +113,7 @@ class _GpuSwitch extends StatelessWidget {
           ),
         ),
         SizedBox(width: metrics.gapSm),
-        // Named so a screen reader does not announce a bare "switch".
+
         Semantics(
           label: 'GPU acceleration',
           child: Switch(value: value, onChanged: onChanged),

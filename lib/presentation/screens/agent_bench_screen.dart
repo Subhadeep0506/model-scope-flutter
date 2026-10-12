@@ -44,7 +44,6 @@ class AgentBenchScreen extends ConsumerWidget {
 
 class _Bench extends StatelessWidget {
   const _Bench({required this.state});
-
   final AgentBenchState state;
 
   @override
@@ -89,8 +88,6 @@ class _Bench extends StatelessWidget {
   }
 }
 
-/// The three figures above the list. A row rather than Home's 2-wide grid:
-/// the mockup fits all three across, and they are short enough to.
 class _StatRow extends StatelessWidget {
   const _StatRow({required this.state});
 
@@ -189,11 +186,9 @@ class _EmptyCustom extends StatelessWidget {
   }
 }
 
-/// A hairline dashed rectangle. Written here rather than pulled in as a
-/// package: it is wanted in exactly one place, and the drawing is nine lines.
+/// A hairline dashed rectangle.
 class DottedBorderBox extends StatelessWidget {
   const DottedBorderBox({super.key, required this.child});
-
   final Widget child;
 
   @override

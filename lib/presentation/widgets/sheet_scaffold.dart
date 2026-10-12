@@ -4,9 +4,6 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import 'square_icon_button.dart';
 
-/// Chrome shared by the Loaded models, Sampling and Attach sheets: a centred
-/// title with an outlined close square in the top-right corner. The body
-/// scrolls, so it survives large text scales and lifts clear of the keyboard.
 class SheetScaffold extends StatelessWidget {
   const SheetScaffold({
     super.key,
@@ -16,8 +13,6 @@ class SheetScaffold extends StatelessWidget {
     this.action,
   }) : body = null;
 
-  /// For a sheet whose body scrolls itself — a lazy list, say — rather than
-  /// one short enough to sit in a [SingleChildScrollView].
   const SheetScaffold.body({
     super.key,
     required this.title,
@@ -30,13 +25,8 @@ class SheetScaffold extends StatelessWidget {
   final List<Widget> children;
   final Widget? body;
 
-  /// Centred for the short titles — `Sampling`, `Attach` — and left for the
-  /// model sheet, whose title is a model name long enough to wrap.
   final TextAlign titleAlign;
 
-  /// An action between the title and the close square, for a sheet with
-  /// something to do to its whole contents — the run log's `Copy all`. Most
-  /// sheets have none.
   final Widget? action;
 
   @override
@@ -81,8 +71,7 @@ class SheetScaffold extends StatelessWidget {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
-      // Keeps the sheet out of the system bars' space, and the
-      // `SafeArea(top: false)` inside handles the gesture bar.
+
       useSafeArea: true,
       backgroundColor: context.palette.canvas,
       barrierColor: AppPalette.scrim,
@@ -92,10 +81,6 @@ class SheetScaffold extends StatelessWidget {
     );
   }
 
-  /// Bounds [child]'s height, which `isScrollControlled: true` otherwise
-  /// leaves free: a scrolling body grows until its title sits under the status
-  /// bar. Measured from the sheet's own context, not the opener's, since the
-  /// two can disagree and it is the window's height that bounds a sheet.
   static WidgetBuilder _capped(Widget child) =>
       (BuildContext context) => ConstrainedBox(
         constraints: BoxConstraints(
@@ -128,8 +113,6 @@ class _SheetHeader extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          // Balances the close button so a centred title really does sit in
-          // the middle of the sheet. A left-aligned one wants the width back.
           if (align == TextAlign.center) const SizedBox(width: 32),
           Expanded(
             child: Text(

@@ -34,15 +34,8 @@ class GgufFile {
   final int sizeBytes;
   final GgufFileKind kind;
 
-  /// Whether the app can download this file. Adapters are the exception: they
-  /// adjust a base model rather than adding to one, and nothing here applies
-  /// them.
   bool get isDownloadable => kind != GgufFileKind.adapter;
-
-  /// Whether this file is a vision projector rather than weights.
   bool get isProjector => kind == GgufFileKind.mmproj;
-
-  /// Stable across the app: also the id of the model once installed.
   String get id => '$repoId/$fileName';
 
   /// Where the weights are fetched from.
@@ -51,20 +44,10 @@ class GgufFile {
 
   /// `1.10 GB`.
   String get sizeLabel => formatBytes(sizeBytes);
-
-  /// `Q4_K_M · 1.10 GB`, the label on a quant chip.
   String get chipLabel => '$quantization · $sizeLabel';
-
-  /// A file this large will not load on a typical phone. A flat threshold, not
-  /// a measurement — device RAM is not portably readable. Heavy files are still
-  /// offered, just marked, because a tablet or desktop may well cope.
   static const int heavyThresholdBytes = 2 * 1000 * 1000 * 1000;
 
   bool get isHeavy => sizeBytes >= heavyThresholdBytes;
-
-  /// The quantisation tag, e.g. `Q4_K_M`. Hugging Face has no field for it, so
-  /// it comes out of the file name; the last match wins because the tag is
-  /// conventionally the final segment.
   String get quantization {
     final stem = fileName.replaceAll(
       RegExp(r'\.gguf$', caseSensitive: false),

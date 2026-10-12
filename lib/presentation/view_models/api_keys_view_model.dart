@@ -10,8 +10,6 @@ class ApiKeysViewModel extends AsyncNotifier<ApiKeysState> {
   Future<ApiKeysState> build() async =>
       ApiKeysState(keys: await ref.read(apiKeyRepositoryProvider).loadAll());
 
-  /// Stores [value] for [kind], dropping any stale verification result — a key
-  /// that has been edited has not been checked.
   Future<void> setKey(ApiKeyKind kind, String value) async {
     final existing = current;
     if (existing.keyOf(kind) == value.trim()) return;
@@ -27,10 +25,6 @@ class ApiKeysViewModel extends AsyncNotifier<ApiKeysState> {
   }
 
   /// Checks a key against its own service and reports what came back.
-  ///
-  /// The token comes from state rather than the keychain: the card flushes
-  /// what is on screen before calling this, and state is written before that
-  /// write completes — so Verify always checks what the user is looking at.
   Future<void> verify(ApiKeyKind kind) async {
     if (!kind.isVerifiable) return;
 

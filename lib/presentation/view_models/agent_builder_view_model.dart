@@ -10,13 +10,8 @@ import 'agent_builder_state.dart';
 
 /// What the builder was opened to do.
 enum BuilderMode {
-  /// A blank agent.
   create,
-
-  /// An existing custom agent, saved back over itself.
   edit,
-
-  /// A copy of a built-in, saved as a new one.
   duplicate,
 }
 
@@ -28,12 +23,9 @@ sealed class SaveOutcome {
 /// Written. [id] is where it went, which the screen needs to pop back to.
 class SaveSucceeded extends SaveOutcome {
   const SaveSucceeded(this.id);
-
   final String id;
 }
 
-/// Not written, because the agent would not validate. The list is the
-/// validator's own wording, shown as-is.
 class SaveRejected extends SaveOutcome {
   const SaveRejected(this.problems);
 
@@ -43,43 +35,20 @@ class SaveRejected extends SaveOutcome {
 /// Not written, because the file would not go down.
 class SaveFailed extends SaveOutcome {
   const SaveFailed(this.reason);
-
   final String reason;
 }
 
 /// Owns the agent being built.
-///
-/// Every mutation lives here rather than in the screen, which only calls these
-/// and draws what comes back. The draft is mutable and the notifier re-emits
-/// the same instance through [_touch] — a form of thirty controls rebuilt into
-/// a fresh immutable tree on every keystroke would be a lot of allocation for
-/// no benefit, and nothing outside this screen reads the draft.
 class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   static const String _logName = 'AgentBuilderViewModel';
-
   BuilderMode _mode = BuilderMode.create;
-
   BuilderMode get mode => _mode;
-
   bool _isBuiltIn = false;
-
-  /// Whether saving writes over a built-in rather than over a file of the
-  /// user's own.
-  ///
-  /// What the destructive button means hangs on this: for an override it is
-  /// `Reset to built-in`, which puts the shipped version back, and for
-  /// anything else it is `Delete agent`, which removes it for good.
   bool get isBuiltInOverride => _mode == BuilderMode.edit && _isBuiltIn;
 
   @override
   Future<AgentDraft> build() async => AgentDraft();
 
-  /// Always notify.
-  ///
-  /// The draft is mutable and edited in place, so the value Riverpod is asked
-  /// to compare is the same object it held before and `==` says nothing
-  /// changed. Without this the screen would redraw on nothing but a load —
-  /// typing a name, adding a step, ticking a read would all be invisible.
   @override
   bool updateShouldNotify(
     AsyncValue<AgentDraft> previous,
@@ -110,9 +79,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
       _isBuiltIn = agent.isBuiltIn;
       final draft = AgentDraft.from(
         agent.template,
-        // A duplicate carries no id, so saving mints a new one and leaves the
-        // original where it is. An edit keeps the id — including a built-in's,
-        // where saving writes a file that shadows the bundled one.
         id: duplicate ? null : agent.id,
       );
       if (duplicate) draft.name = '${agent.template.name} copy';
@@ -123,12 +89,7 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   }
 
   AgentDraft get _draft => state.value ?? AgentDraft();
-
-  /// Re-emits the draft so the screen rebuilds. See [updateShouldNotify] for
-  /// why re-emitting the same object is enough.
   void _touch() => state = AsyncData<AgentDraft>(_draft);
-
-  // ---- basics -------------------------------------------------------------
 
   void setName(String value) {
     _draft.name = value;
@@ -149,8 +110,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     _draft.systemPrompt = value;
     _touch();
   }
-
-  // ---- limits -------------------------------------------------------------
 
   void setWebResults(int value) {
     _draft.limits.webResults = value;
@@ -182,8 +141,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     _touch();
   }
 
-  // ---- inputs -------------------------------------------------------------
-
   void addInput() {
     _draft.inputs.add(DraftInput());
     _touch();
@@ -194,8 +151,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     _touch();
   }
 
-  /// Renaming an input renames it everywhere it is read, so a step does not
-  /// silently start reading something that no longer exists.
   void setInputLabel(String key, String label) {
     final input = _inputFor(key);
     if (input == null) return;
@@ -234,8 +189,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     final input = _inputFor(key);
     if (input == null) return;
     input.type = type;
-    // A choice with no options is a blocker the validator reports, so one
-    // empty row is offered rather than an empty list.
     if (type == AgentInputType.choice && input.options.isEmpty) {
       input.options.add('');
     }
@@ -278,14 +231,11 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     return null;
   }
 
-  // ---- steps --------------------------------------------------------------
-
   void addStep() {
     _draft.steps.add(DraftStep(id: _nextStepId()));
     _touch();
   }
 
-  /// `step_1`, `step_2`, … skipping any already taken.
   String _nextStepId() {
     final taken = <String>{for (final step in _draft.steps) step.id.trim()};
     for (var n = _draft.steps.length + 1; ; n++) {
@@ -298,7 +248,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     final step = _stepFor(key);
     if (step == null) return;
     _draft.steps.remove(step);
-    // Anything reading it is now reading something that will never run.
     _dropReference('step.${step.id.trim()}');
     _touch();
   }
@@ -313,10 +262,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   }
 
   /// Moves a step one place. [delta] is -1 for up, 1 for down.
-  ///
-  /// Anything the moved step reads that now comes after it is dropped, and so
-  /// is anything that read it and now comes before — reordering must not leave
-  /// a step reading the future.
   void moveStep(String key, int delta) {
     final index = _draft.steps.indexWhere((step) => step.key == key);
     final target = index + delta;
@@ -378,7 +323,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     return null;
   }
 
-  /// Drops every read a step is no longer allowed to make.
   void _pruneReads() {
     for (final (index, step) in _draft.steps.indexed) {
       final allowed = <String>{
@@ -402,8 +346,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     }
   }
 
-  // ---- the answer ---------------------------------------------------------
-
   void setAnswerPrompt(String value) {
     _draft.answer.prompt = value;
     _touch();
@@ -417,7 +359,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
 
   void setStructured(bool value) {
     _draft.answer.isStructured = value;
-    // One empty row to type into, rather than an empty tab with an Add button.
     if (value &&
         _draft.answer.fields.isEmpty &&
         _draft.answer.rawSchema == null) {
@@ -432,10 +373,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   }
 
   /// Replaces the schema with one typed into the JSON tab.
-  ///
-  /// When the rows can draw it they become the source of truth and the raw
-  /// copy is dropped; when they cannot, the raw copy is kept and the rows are
-  /// left alone — see [DraftAnswer.rawSchema].
   void setRawSchema(Map<String, dynamic> schema) {
     final fields = fieldsFromSchema(schema);
     final answer = _draft.answer;
@@ -457,12 +394,8 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     _touch();
   }
 
-  /// The fields are mutated in place by the rows; this only redraws.
   void touchFields() => _touch();
 
-  // ---- saving -------------------------------------------------------------
-
-  /// Validates and writes. Returns what happened for the screen to show.
   Future<SaveOutcome> save() async {
     final draft = _draft;
     final id = draft.id ?? await _mintId(draft.name);
@@ -507,8 +440,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
     return SaveSucceeded(template.id);
   }
 
-  /// What the validator does not check, because a template cannot be built
-  /// without them in the first place.
   static List<String> _ownProblems(AgentDraft draft, AgentTemplate template) =>
       <String>[
         if (template.name.isEmpty) 'This agent needs a name',
@@ -542,10 +473,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
   Future<void> delete() => _removeFile('Deleted agent');
 
   /// Throws away the user's version of a built-in.
-  ///
-  /// The same file removal as [delete] — the bundled template was never gone,
-  /// only shadowed, so dropping the override is all it takes to have the
-  /// shipped agent load again.
   Future<void> reset() => _removeFile('Reset agent');
 
   Future<void> _removeFile(String what) async {
@@ -558,10 +485,6 @@ class AgentBuilderViewModel extends AsyncNotifier<AgentDraft> {
 }
 
 /// `News digest` → `news_digest`.
-///
-/// Used for ids, which become file names, and for input and step names, which
-/// are written into prompts as `{{input.x}}` — so anything outside letters,
-/// digits and underscores has to go.
 String slugify(String value) {
   final lower = value.trim().toLowerCase();
   final cleaned = lower

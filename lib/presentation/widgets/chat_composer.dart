@@ -6,9 +6,6 @@ import '../view_models/chat_state.dart';
 import 'image_thumbnail.dart';
 import 'square_icon_button.dart';
 
-/// The bottom bar: attach, the message field, and send. It owns only its text
-/// controller and reports every action upwards, so chat behaviour stays in one
-/// place.
 class ChatComposer extends StatefulWidget {
   const ChatComposer({
     super.key,
@@ -26,15 +23,10 @@ class ChatComposer extends StatefulWidget {
   final bool enabled;
   final bool isStreaming;
 
-  /// Images waiting to go out with the next message.
   final List<String> attachments;
 
-  /// Whether another image can be picked — false for a model that cannot read
-  /// one, and false again once the cap is reached.
   final bool canAttach;
 
-  /// Whether the loaded model can read images at all. Separates "no room left"
-  /// from "this model is blind", which the button says out loud.
   final bool hasVision;
 
   final ValueChanged<String> onSend;
@@ -62,8 +54,6 @@ class _ChatComposerState extends State<ChatComposer> {
     widget.onSend(text);
   }
 
-  /// A disabled button announces why it is disabled, since there is no caption
-  /// left to carry the explanation.
   String get _attachLabel {
     if (widget.canAttach) return 'Attach an image';
     if (!widget.hasVision) {
@@ -165,7 +155,6 @@ class _Field extends StatelessWidget {
   }
 }
 
-/// Send while idle, stop while tokens are arriving.
 class _SendButton extends StatelessWidget {
   const _SendButton({
     required this.controller,
@@ -211,8 +200,6 @@ class _SendButton extends StatelessWidget {
   }
 }
 
-/// The images queued for the next message, at most three, so a plain row is
-/// enough — there is never anything to scroll.
 class _Attachments extends StatelessWidget {
   const _Attachments({required this.paths, required this.onRemove});
 

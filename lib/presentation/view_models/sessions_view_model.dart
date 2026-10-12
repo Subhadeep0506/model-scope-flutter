@@ -4,30 +4,19 @@ import 'package:uuid/uuid.dart';
 import '../../config/di/providers.dart';
 import '../../data/models/chat_session.dart';
 
-/// Owns the list of conversations shown on the Chats screen. Every change
-/// writes the whole list back, which is cheap at this scale and keeps the
-/// stored document and the in-memory list from drifting.
 class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
   static const String untitled = 'New chat';
-
   static const Uuid _uuid = Uuid();
-
-  /// Nothing is seeded on a first launch: an empty Chats list says plainly
-  /// that there are no chats, where a blank "New chat" row only looked like
-  /// one the user had forgotten starting. The screen offers a button instead.
   @override
   Future<List<ChatSession>> build() async =>
       _sorted(await ref.read(sessionRepositoryProvider).load());
 
-  /// Creates an empty session and returns it so the caller can navigate to it.
   Future<ChatSession> create() async {
     final session = _blank();
     await _write(<ChatSession>[session, ..._current]);
     return session;
   }
 
-  /// Deletes a session and the images its messages held — nothing else can be
-  /// pointing at them, so leaving the copies behind would only orphan them.
   Future<void> delete(String id) async {
     final doomed = byId(id);
     await _write(_current.where((s) => s.id != id).toList());
@@ -58,8 +47,6 @@ class SessionsViewModel extends AsyncNotifier<List<ChatSession>> {
     return ChatSession(
       id: _uuid.v4(),
       title: untitled,
-      // Empty when nothing is installed; the session is still created so the
-      // chat screen can open and explain why.
       modelId: ref.read(activeModelProvider)?.id ?? '',
       createdAt: now,
       updatedAt: now,

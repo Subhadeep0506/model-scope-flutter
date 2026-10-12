@@ -13,12 +13,6 @@ import 'data_table_card.dart';
 import 'headline_chips.dart';
 import 'structured_view.dart';
 
-/// Weather Report's answer: conditions now, then the three-day trend.
-///
-/// The forecast arrives as a flat list of one row per place per day rather
-/// than nested under each place. That is the shape a chart wants, and it is
-/// also the easiest for a small model to fill — one object per row, with no
-/// nesting to lose track of halfway through.
 class WeatherForecastView implements StructuredView {
   const WeatherForecastView();
 
@@ -88,8 +82,6 @@ class WeatherForecastView implements StructuredView {
     );
   }
 
-  /// `Tokyo, Berlin`, or empty when nothing is expected — which drops the chip
-  /// rather than drawing `RAIN / none`.
   static String _rain(Map<String, dynamic> data) =>
       readStringList(data['rain_expected']).join(', ');
 
@@ -100,8 +92,6 @@ class WeatherForecastView implements StructuredView {
     return unit.isEmpty ? text : '$text$unit';
   }
 
-  /// Groups the flat forecast rows into one line per place, keeping the days
-  /// in the order they first appear so every line shares an x axis.
   static List<_Series> _seriesOf(List<Map<String, dynamic>> forecast) {
     final days = <String>[];
     final byPlace = <String, Map<String, double>>{};
@@ -199,7 +189,6 @@ class _ForecastChart extends StatelessWidget {
     );
   }
 
-  /// Padded by a degree either side, so a line does not sit on the axis.
   (double, double) _bounds() {
     var low = double.infinity;
     var high = double.negativeInfinity;
@@ -246,13 +235,10 @@ class _ForecastChart extends StatelessWidget {
     );
   }
 
-  /// `2026-10-09` → `10-09`. The model writes the day however it likes, and a
-  /// full ISO date will not fit three to a phone's width.
   static String _shorten(String day) =>
       day.length > 5 && day[4] == '-' ? day.substring(5) : day;
 }
 
-/// Which colour is which place. Without it the chart is five unnamed lines.
 class _Legend extends StatelessWidget {
   const _Legend({required this.series});
 

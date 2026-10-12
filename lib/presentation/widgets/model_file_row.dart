@@ -12,9 +12,6 @@ import 'mono_label.dart';
 import 'section_card.dart';
 import 'square_icon_button.dart';
 
-/// One file in the model sheet: kind badge, quant, size, name and its control.
-/// Weights and projectors get a download button; adapters are listed for
-/// reference, with an eye that explains what they are.
 class ModelFileRow extends ConsumerWidget {
   const ModelFileRow({super.key, required this.model, required this.file});
 
@@ -71,8 +68,7 @@ class _Header extends StatelessWidget {
       children: <Widget>[
         MonoChip(file.kind.label),
         SizedBox(width: metrics.gapSm),
-        // Expanded, not Flexible: a loose fit leaves slack at the end of the
-        // row, pushing the size and button off the card's edge.
+
         Expanded(
           child: MonoLabel(
             file.quantization,
@@ -123,8 +119,6 @@ class _Action extends ConsumerWidget {
       );
     }
 
-    // A repository holds one projector, so once it is in there is nothing
-    // left to fetch — the row says so rather than offering the bytes again.
     final library = ref.watch(modelLibraryViewModelProvider).value;
     if (file.isProjector &&
         library?.projectorFor(file.repoId)?.fileName == file.fileName) {
@@ -142,7 +136,7 @@ class _Action extends ConsumerWidget {
       size: 40,
       background: isBusy ? palette.primaryIdle : palette.primary,
       foreground: palette.onPrimary,
-      // Null while a transfer is live: the controls below the row own it then.
+
       onPressed: isBusy
           ? null
           : () => ref

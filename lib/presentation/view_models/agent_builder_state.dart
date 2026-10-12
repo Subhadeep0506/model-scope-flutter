@@ -6,10 +6,6 @@ import '../../domain/services/schema_fields.dart';
 const Uuid _uuid = Uuid();
 
 /// One input being edited.
-///
-/// Mutable, and carrying a [key] the file never sees. Both are because this is
-/// a form: rows get typed into, reordered and deleted, and Flutter needs
-/// something stable to tell row three from row four when row two goes away.
 class DraftInput {
   DraftInput({
     String? key,
@@ -21,20 +17,10 @@ class DraftInput {
     this.required = true,
   }) : key = key ?? _uuid.v4(),
        options = options ?? <String>[];
-
   final String key;
-
-  /// The identifier a step reads as `input.<name>`. Derived from [label] as
-  /// the user types, so there is one less field to fill in — but kept
-  /// separately, because an agent loaded for editing may have the two
-  /// deliberately different.
   String name;
-
   String label;
   AgentInputType type;
-
-  /// The choices, when [type] is a choice. The validator rejects an empty
-  /// list, which is why picking Choice reveals an editor for it.
   final List<String> options;
 
   String defaultValue;
@@ -75,25 +61,15 @@ class DraftStep {
        reads = reads ?? <String>[];
 
   final String key;
-
-  /// What later steps read as `step.<id>`.
   String id;
-
   StepKind kind;
-
-  /// Null until a tool is picked, which the validator reports as a problem.
   String? tool;
-
   String prompt;
-
-  /// `input.<name>` and `step.<id>` entries, in the order they were ticked.
   final List<String> reads;
 
   PipelineStep toStep() => PipelineStep(
     id: id.trim(),
     kind: kind,
-    // A reason step with a tool left over from a toggle would confuse the
-    // validator, so the tool is dropped unless the step is a tool step.
     tool: kind == StepKind.tool ? tool : null,
     prompt: prompt.trim().isEmpty ? null : prompt.trim(),
     reads: <String>[...reads],
@@ -133,20 +109,10 @@ class DraftAnswer {
 
   /// Which component draws the result. Null falls back to the generic table.
   String? view;
-
-  /// The `Structured response` toggle.
   bool isStructured;
-
-  /// The rows in the `{} Fields` tab.
   final List<SchemaField> fields;
-
-  /// Set only when the schema is one the rows cannot draw — an enum, a
-  /// `$ref`, a constraint. While it is set it is the source of truth, so
-  /// loading an exotic schema, saving, and loading again does not quietly
-  /// simplify it into something the builder happens to understand.
   Map<String, dynamic>? rawSchema;
 
-  /// What the template should carry, or null when the toggle is off.
   Map<String, dynamic>? toSchema() {
     if (!isStructured) return null;
     return rawSchema ?? schemaFromFields(fields);
@@ -175,10 +141,6 @@ class DraftAnswer {
 }
 
 /// The context limits being edited — the `Limits` card's six sliders.
-///
-/// Mutable like the rest of the draft, and always populated: a draft built
-/// from a template with no limits block starts at the defaults, so the sliders
-/// have somewhere to sit.
 class DraftLimits {
   DraftLimits({
     this.webResults = AgentLimits.defaultWebResults,
@@ -216,10 +178,6 @@ class DraftLimits {
 }
 
 /// A whole agent being edited.
-///
-/// Separate from [AgentTemplate] because a form holds things a template
-/// cannot: a name that is still empty, a step with no tool chosen, a schema
-/// that does not parse yet. Converting happens once, on save.
 class AgentDraft {
   AgentDraft({
     this.id,
@@ -238,50 +196,28 @@ class AgentDraft {
        steps = steps ?? <DraftStep>[],
        answer = answer ?? DraftAnswer(),
        limits = limits ?? DraftLimits();
-
-  /// Null until the agent has been saved once. Set then and never changed,
-  /// so renaming an agent does not move its file or orphan its run history.
   String? id;
 
   String name;
   String purpose;
-
-  /// The paragraph on the detail screen. The builder has no control for it,
-  /// so it is carried through untouched for an agent that already has one.
   String description;
-
   String icon;
   String systemPrompt;
 
   final List<DraftInput> inputs;
   final List<DraftStep> steps;
   DraftAnswer answer;
-
-  /// How much text a run of this agent may push at the model.
   final DraftLimits limits;
-
   final DateTime? createdAt;
-
-  /// Carried through from the file; the builder draws no control for it.
   final double? temperature;
-
-  /// Whether this draft is editing something already saved.
   bool get isExisting => id != null;
-
-  /// The tools each half of the `Limits` card belongs to. A weather agent
-  /// should not be shown a passage length, so the card asks these first.
   static const Set<String> webToolNames = <String>{
     'web_search',
     'read_web_page',
   };
   static const String documentToolName = 'search_document';
-
   bool get usesWebTools => _usesAny(webToolNames);
-
   bool get usesDocumentTools => _usesAny(<String>{documentToolName});
-
-  /// A tool left on a step that has since been switched to Reason does not
-  /// count: [DraftStep.toStep] drops it, so it will never be called.
   bool _usesAny(Set<String> tools) => steps.any(
     (step) => step.kind == StepKind.tool && tools.contains(step.tool),
   );
@@ -322,9 +258,6 @@ class AgentDraft {
   );
 
   /// Every reference a step at [stepIndex] is allowed to read.
-  ///
-  /// Inputs, plus the steps *before* it — a step cannot read one that has not
-  /// run. Pass the pipeline length for the answer step, which reads anything.
   List<DraftReference> referencesBefore(int stepIndex) => <DraftReference>[
     for (final input in inputs)
       if (input.name.trim().isNotEmpty)
@@ -344,13 +277,8 @@ class AgentDraft {
       label.trim().isNotEmpty ? label.trim() : name.trim();
 }
 
-/// One entry in a READS picker.
 class DraftReference {
   const DraftReference({required this.reference, required this.label});
-
-  /// `input.query` or `step.search`.
   final String reference;
-
-  /// `Input · Query`, as the dropdown draws it.
   final String label;
 }

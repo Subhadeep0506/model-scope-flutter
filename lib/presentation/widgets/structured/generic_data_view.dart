@@ -7,13 +7,6 @@ import '../mono_label.dart';
 import 'data_table_card.dart';
 import 'structured_view.dart';
 
-/// What an agent gets when it declares a schema but names no component this
-/// build knows — which is every agent a user writes themselves.
-///
-/// It reads the JSON rather than the schema, and makes three decisions:
-/// a list of objects becomes a table of its own keys, a list of scalars
-/// becomes a comma-separated line, and anything else becomes a labelled row.
-/// No field names are assumed, so this works on data it has never seen.
 class GenericDataView implements StructuredView {
   const GenericDataView();
 
@@ -57,8 +50,6 @@ class GenericDataView implements StructuredView {
     );
   }
 
-  /// A scalar as one line. A list of scalars is joined rather than tabled —
-  /// `rain_expected: Tokyo, Berlin` says more than a one-column table would.
   static String _describe(Object? value) => switch (value) {
     null => '',
     final List<Object?> list =>
@@ -69,11 +60,9 @@ class GenericDataView implements StructuredView {
     _ => '$value',
   };
 
-  /// `rain_expected` → `RAIN EXPECTED`.
   static String _label(String key) => key.replaceAll('_', ' ').toUpperCase();
 }
 
-/// A table of whatever keys the rows happen to carry.
 class _Table extends StatelessWidget {
   const _Table({required this.rows});
 

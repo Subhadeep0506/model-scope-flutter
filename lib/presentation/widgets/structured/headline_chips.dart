@@ -4,7 +4,6 @@ import '../../../config/theme/app_metrics.dart';
 import '../../../config/theme/app_palette.dart';
 import '../mono_label.dart';
 
-/// One figure a structured answer leads with, e.g. `CHEAPEST / Retailer C`.
 class Headline {
   const Headline({
     required this.label,
@@ -15,18 +14,9 @@ class Headline {
   final String label;
   final String value;
 
-  /// Drawn in the brand colour. One headline per answer should carry it —
-  /// the cheapest price, the warmest city — and the rest should not, or the
-  /// emphasis says nothing.
   final bool accent;
 }
 
-/// The row of figures above a structured answer's table.
-///
-/// This is where the judgement goes now that the agents answer in data rather
-/// than prose: the model still has to decide which retailer is cheapest, it
-/// just returns the name in a field instead of a sentence. A headline whose
-/// field the model left empty is dropped rather than drawn blank.
 class HeadlineChips extends StatelessWidget {
   const HeadlineChips({super.key, required this.headlines});
 

@@ -17,32 +17,18 @@ class EmbeddingException implements Exception {
 }
 
 /// Turns text into vectors.
-///
-/// An interface with one real implementation, the same arrangement as
-/// [LlmService] and for the same reason: the tests must be able to encode
-/// without a gigabyte of weights or a native library.
 abstract interface class EmbeddingService {
-  /// Whether weights are currently loaded.
   bool get isLoaded;
-
-  /// Which model is loaded, or null when none is.
   String? get loadedModelId;
-
   Future<void> load(ModelDescriptor model);
-
   /// Encodes [texts], preserving order.
   Future<List<List<double>>> encode(List<String> texts);
-
-  /// Releases the weights. Held only while indexing or retrieving.
   Future<void> dispose();
 }
 
-/// [EmbeddingService] backed by `package:nobodywho`'s encoder.
 class NobodyWhoEmbeddingService implements EmbeddingService {
   NobodyWhoEmbeddingService();
-
   static const String _logName = 'NobodyWhoEmbeddingService';
-
   nobodywho.Encoder? _encoder;
   String? _loadedModelId;
 

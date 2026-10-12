@@ -7,11 +7,6 @@ import '../../data/models/agent_run.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// The `TRACE` block: the heading, the total, and one row per step.
-///
-/// A row says what a step did and how long it took. What was actually sent and
-/// returned is the log's job — [onShowLogs] is what reaches it, and is null on
-/// a run read back from history, whose logs were never kept.
 class AgentTraceList extends StatelessWidget {
   const AgentTraceList({
     super.key,
@@ -22,13 +17,8 @@ class AgentTraceList extends StatelessWidget {
   });
 
   final List<TraceEntry> entries;
-
-  /// `4.20s total`.
   final String totalLabel;
-
-  /// Draws a spinner under the last row while more are still coming.
   final bool isRunning;
-
   final VoidCallback? onShowLogs;
 
   @override
@@ -154,9 +144,6 @@ class _TraceRow extends StatelessWidget {
     );
   }
 
-  /// The four kinds are coloured apart so a trace can be read down the left
-  /// without reading the labels — which is how you spot a run that thought
-  /// three times and never called a tool.
   static Color _kindColour(TraceKind kind, AppPalette palette) =>
       switch (kind) {
         TraceKind.thought => palette.warning,

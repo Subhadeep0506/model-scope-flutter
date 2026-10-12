@@ -8,15 +8,6 @@ import 'llm_service.dart';
 const String _logName = 'ModelLoader';
 
 /// Loads [model], dropping GPU offload rather than giving up on it.
-///
-/// Returns a line to show the user, or null when the load went as asked.
-///
-/// The retry is deliberately not written back to settings: a refused GPU
-/// allocation is about this attempt, so the next model gets another chance.
-///
-/// Shared by Chat and by an agent run, which both want the same weights and
-/// the same fallback. Keeping it here rather than in either view model means
-/// a phone whose driver refuses the allocation behaves the same in both.
 Future<String?> loadWithFallback({
   required LlmService llm,
   required ModelDescriptor model,

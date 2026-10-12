@@ -50,9 +50,6 @@ class SessionsScreen extends ConsumerWidget {
                 AsyncLoading() when !sessions.hasValue => const Center(
                   child: CircularProgressIndicator(),
                 ),
-                // `visible` is what the filters left; `stored` is whether
-                // there is anything at all. The two empty states read
-                // differently, so the list needs both.
                 _ => _SessionList(
                   sessions: visible,
                   stored: sessions.value?.length ?? 0,
@@ -66,8 +63,6 @@ class SessionsScreen extends ConsumerWidget {
   }
 }
 
-/// Starts a chat and opens it. Shared by the header's `+` and the button on
-/// the empty state, so both do exactly the same thing.
 Future<void> createSession(BuildContext context, WidgetRef ref) async {
   final router = GoRouter.of(context);
   final session = await ref.read(sessionsViewModelProvider.notifier).create();
@@ -76,11 +71,7 @@ Future<void> createSession(BuildContext context, WidgetRef ref) async {
 
 class _SessionList extends ConsumerWidget {
   const _SessionList({required this.sessions, required this.stored});
-
   final List<ChatSession> sessions;
-
-  /// How many sessions exist before filtering, which is what separates "none
-  /// yet" from "none of them match".
   final int stored;
 
   @override
@@ -113,9 +104,6 @@ class _SessionList extends ConsumerWidget {
     );
   }
 
-  /// Asks before deleting, as removing a model in Settings does. A transcript
-  /// is not recoverable, so the decision is made up front rather than left to
-  /// a snackbar the user has to catch in time.
   Future<void> _delete(
     BuildContext context,
     WidgetRef ref,
@@ -152,9 +140,6 @@ class _SessionList extends ConsumerWidget {
   }
 }
 
-/// What a fresh install shows. Nothing is seeded any more, so this is the
-/// first thing a new user sees on the Chat tab — and it has to offer the way
-/// in, not just report that there is nothing here.
 class _NoChatsYet extends ConsumerWidget {
   const _NoChatsYet();
 

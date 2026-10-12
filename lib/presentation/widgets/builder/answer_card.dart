@@ -12,19 +12,9 @@ import 'labelled_field.dart';
 import 'reads_picker.dart';
 import 'schema_editor.dart';
 
-/// The `Answer · always last` card.
-///
-/// Carries a prompt field the mockups leave out — `answer.prompt` is required
-/// and is the question the final step actually asks, so an agent cannot be
-/// built without one. It also carries the `view` picker, which the mockups
-/// have no equivalent for because they predate structured responses having
-/// components to draw them.
 class AnswerCard extends ConsumerWidget {
   const AnswerCard({super.key, required this.answer, required this.available});
-
   final DraftAnswer answer;
-
-  /// Everything the answer may read: every input and every step.
   final List<DraftReference> available;
 
   @override
@@ -42,8 +32,7 @@ class AnswerCard extends ConsumerWidget {
             children: <Widget>[
               Icon(Icons.flag_outlined, size: 18, color: palette.primary),
               SizedBox(width: metrics.gapSm),
-              // Expanded so the title wraps rather than runs off the card at
-              // a large system text size.
+
               Expanded(
                 child: Text(
                   'Answer · always last',
@@ -67,8 +56,6 @@ class AnswerCard extends ConsumerWidget {
           ),
           SizedBox(height: metrics.gapSm),
           Text(
-            // Worth saying: an empty list is not an empty answer, and someone
-            // ticking nothing should know what they will get.
             'Reading nothing hands the answer every step, in order.',
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: palette.muted),
@@ -85,7 +72,6 @@ class AnswerCard extends ConsumerWidget {
   }
 }
 
-/// Which component draws the result.
 class _ViewPicker extends ConsumerWidget {
   const _ViewPicker({required this.answer});
 
@@ -111,8 +97,6 @@ class _ViewPicker extends ConsumerWidget {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              // An agent loaded from a file may name a component this build
-              // does not have; it is listed rather than silently reset.
               value: current != null && !isKnownView(current) ? null : current,
               isExpanded: true,
               isDense: true,

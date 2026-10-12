@@ -7,11 +7,6 @@ import 'icon_tile.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// The MODEL card on an agent's screen.
-///
-/// Picking here changes the model for this run only. The active model in
-/// Settings is left alone on purpose: running one agent on two models to
-/// compare them should not keep rewriting what Chat answers with.
 class AgentModelPicker extends StatelessWidget {
   const AgentModelPicker({
     super.key,
@@ -21,10 +16,7 @@ class AgentModelPicker extends StatelessWidget {
   });
 
   final List<ModelDescriptor> models;
-
-  /// Null before anything has been installed.
   final String? selectedId;
-
   final ValueChanged<String> onSelected;
 
   @override
@@ -89,9 +81,6 @@ class AgentModelPicker extends StatelessWidget {
     );
   }
 
-  /// The selected id, or the first installed model when the selection names
-  /// one that has since been removed — a dropdown whose value is not among its
-  /// items throws.
   static String? _valueOf(List<ModelDescriptor> models, String? selected) {
     for (final model in models) {
       if (model.id == selected) return selected;

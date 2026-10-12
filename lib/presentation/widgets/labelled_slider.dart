@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import 'mono_label.dart';
 
-/// A slider under a monospace caption with its value aligned to the right.
-/// Shared by the Sampling sheet and the Runtime defaults card.
 class LabelledSlider extends StatelessWidget {
   const LabelledSlider({
     super.key,
@@ -17,13 +15,10 @@ class LabelledSlider extends StatelessWidget {
     required this.onChangeEnd,
   });
 
-  /// Upper-case caption, e.g. `CONTEXT LENGTH`.
   final String label;
 
   final double value;
 
-  /// The printed value, used for the label, tooltip and screen-reader
-  /// announcement alike so all three agree.
   final String display;
 
   final (double, double) range;
@@ -60,6 +55,5 @@ class LabelledSlider extends StatelessWidget {
   }
 }
 
-/// Widens an integer range for a [LabelledSlider], which works in doubles.
 (double, double) asDoubles((int, int) range) =>
     (range.$1.toDouble(), range.$2.toDouble());

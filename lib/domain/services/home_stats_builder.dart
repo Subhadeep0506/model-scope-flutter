@@ -7,19 +7,8 @@ import '../../data/models/usage_record.dart';
 import '../../data/repositories/model_library_repository.dart';
 
 const int _activityLimit = 8;
-
-/// How many days the latency trend covers.
 const int _trendDays = 7;
 
-/// Home's figures.
-///
-/// Where each comes from matters, and the split is deliberate. Everything
-/// about performance — tokens, latency, throughput, which model did what —
-/// is folded out of [usage], the permanent ledger, so deleting a chat cannot
-/// lower a figure for work that really happened. Everything about what
-/// currently exists — how many sessions there are, what is in the activity
-/// feed — still comes from [sessions] and [library], because a count of
-/// things on the device has to be honest about the device.
 HomeStats buildHomeStats({
   required List<ChatSession> sessions,
   required ModelLibrary library,
@@ -28,9 +17,6 @@ HomeStats buildHomeStats({
   List<AgentRun> runs = const <AgentRun>[],
   int agentCount = 0,
 }) {
-  // `runs` is in the guard as well as `usage` because the two are written
-  // separately: a run recorded before the ledger existed is still activity
-  // worth drawing, and folding to empty would hide the whole feed.
   if (usage.isEmpty && library.isEmpty && sessions.isEmpty && runs.isEmpty) {
     return HomeStats.empty;
   }
@@ -86,12 +72,6 @@ DailyLatency _bucket(List<UsageRecord> replies, DateTime day) {
   );
 }
 
-/// Mean throughput per parameter size, smallest first. Models with no stated
-/// parameter count are left out; an unlabelled bar on a size axis says nothing.
-///
-/// Reads the size off the ledger rather than the library, so a bar survives
-/// the model that earned it being deleted — which is the point of recording
-/// the label on every row in the first place.
 List<SizeThroughput> _throughputBySize(UsageLedger usage) {
   final sums = <String, double>{};
   final counts = <String, int>{};
@@ -113,8 +93,6 @@ List<SizeThroughput> _throughputBySize(UsageLedger usage) {
     ..sort((a, b) => _params(a.paramLabel).compareTo(_params(b.paramLabel)));
 }
 
-/// `360M` → 360000000, `1.5B` → 1500000000, so the bars sort by actual size
-/// rather than alphabetically — which would put `1.5B` before `360M`.
 double _params(String label) {
   final match = RegExp(
     r'([\d.]+)\s*([MB])',
@@ -126,21 +104,12 @@ double _params(String label) {
   return unit == 'B' ? value * 1000000000 : value * 1000000;
 }
 
-/// Every model that has answered something, plus the installed ones that have
-/// not yet — which is what tells the user a download is sitting unused.
-///
-/// A model that has been deleted keeps its row: the replies it produced are
-/// still part of what this device has done, and dropping the row was the old
-/// behaviour that made the list shrink under the user.
 List<ModelUsage> _usage(UsageLedger usage, ModelLibrary library) {
   final rows = <ModelUsage>[
     for (final model in usage.byModel.values)
       if (model.replies > 0)
         ModelUsage(
           modelId: model.modelId,
-          // The library's name wins while the model is installed, so a
-          // rename in the catalog shows up; the recorded one takes over
-          // once the weights are gone.
           name: library.byId(model.modelId)?.name ?? _named(model),
           quantization:
               library.byId(model.modelId)?.quantization ?? model.quantization,
@@ -159,8 +128,6 @@ List<ModelUsage> _usage(UsageLedger usage, ModelLibrary library) {
   return rows;
 }
 
-/// What to call a model whose weights have gone. The recorded name when there
-/// is one, and the file it came from when there is not.
 String _named(ModelTotals model) =>
     model.name.isNotEmpty ? model.name : model.modelId.split('/').last;
 
@@ -211,9 +178,6 @@ List<ActivityEntry> _activity(
   return entries.take(_activityLimit).toList();
 }
 
-/// The mono slug under a session title: `smollm2-360m`. A session created
-/// before anything was installed carries no model id — ordinary on a fresh
-/// install — so it reads `no model` rather than `removed model`.
 String _slugOf(String modelId, ModelLibrary library) {
   if (modelId.isEmpty) return 'no model';
 

@@ -6,8 +6,6 @@ import '../../config/theme/app_palette.dart';
 import 'mono_label.dart';
 import 'square_icon_button.dart';
 
-/// Transcript header: back, the session overline and title, and the control
-/// that opens the Sampling sheet.
 class ChatHeader extends StatelessWidget {
   const ChatHeader({
     super.key,

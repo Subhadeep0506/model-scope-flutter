@@ -4,8 +4,6 @@ import '../../config/theme/app_palette.dart';
 import 'mono_label.dart';
 import 'square_icon_button.dart';
 
-/// The Chats screen title block: a live session count, the heading, and the
-/// filled `+` that starts a new conversation.
 class SessionsHeader extends StatelessWidget {
   const SessionsHeader({
     super.key,

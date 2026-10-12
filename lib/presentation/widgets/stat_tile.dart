@@ -5,9 +5,6 @@ import '../../config/theme/app_palette.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One figure on the Home dashboard: a mono label, a large value and a line
-/// saying what it counts. Sized by the grid, not its own content, so a long
-/// caption does not make a taller tile — see `AppMetrics.statTile`.
 class StatTile extends StatelessWidget {
   const StatTile({
     super.key,
@@ -18,20 +15,14 @@ class StatTile extends StatelessWidget {
     this.accent = false,
   });
 
-  /// `TOKENS GENERATED`, drawn in mono caps.
   final String label;
 
-  /// The figure itself: `184.5k`, `416ms`.
   final String value;
 
-  /// `time to first token`.
   final String caption;
 
-  /// A mono suffix set beside the value, as in `94.2 tok/s`.
   final String? unit;
 
-  /// Draws the value in the brand green. One tile per screenful, so the grid
-  /// has a focal point rather than six equal weights.
   final bool accent;
 
   @override

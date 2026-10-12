@@ -3,9 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
-/// A document could not be turned into text. The message is written to be
-/// shown to the user as-is, because this is the first thing that goes wrong
-/// when they pick the wrong file.
 class DocumentExtractionException implements Exception {
   const DocumentExtractionException(this.message);
 
@@ -16,17 +13,8 @@ class DocumentExtractionException implements Exception {
 }
 
 /// Turns a picked file into plain text.
-///
-/// Three formats, and nothing else: `.txt` and `.md` are read directly,
-/// `.pdf` has its text layer pulled out. There is no OCR, so a PDF of
-/// scanned pages holds no text to find — that case is named rather than left
-/// to produce an empty index the user would have to diagnose from a bad
-/// answer.
 class DocumentExtractor {
   const DocumentExtractor();
-
-  /// Extensions the picker offers and this understands. Kept here so the two
-  /// cannot drift apart.
   static const List<String> extensions = <String>['txt', 'md', 'pdf'];
 
   Future<String> extract(String path) async {
@@ -83,8 +71,6 @@ class DocumentExtractor {
     }
   }
 
-  /// Parsing a PDF is CPU-bound and scales with the page count, so it runs
-  /// off the UI thread.
   Future<String> _readPdf(File file) async {
     final Uint8List bytes;
     try {
@@ -98,8 +84,6 @@ class DocumentExtractor {
   }
 }
 
-/// Runs in an isolate, so it must be a top-level function and must not touch
-/// anything but its argument.
 String _extractPdfText(Uint8List bytes) {
   PdfDocument? document;
   try {

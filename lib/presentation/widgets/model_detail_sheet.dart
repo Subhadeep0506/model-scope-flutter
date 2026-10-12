@@ -11,9 +11,6 @@ import 'model_file_row.dart';
 import 'mono_label.dart';
 import 'sheet_scaffold.dart';
 
-/// Everything one catalog entry holds: its quants, projectors and adapters,
-/// each with the control that acts on it. The only place that reads a
-/// repository's file tree, once per model per run.
 class ModelDetailSheet extends ConsumerWidget {
   const ModelDetailSheet({super.key, required this.model});
 
@@ -47,7 +44,6 @@ class ModelDetailSheet extends ConsumerWidget {
   }
 }
 
-/// One page-padded block inside the sheet's scroll view.
 class _Padded extends StatelessWidget {
   const _Padded({required this.child});
 

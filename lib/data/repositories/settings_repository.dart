@@ -6,9 +6,7 @@ import '../sources/json_file_store.dart';
 /// Storage for the sampling configuration, in `settings.json`.
 class SettingsRepository {
   const SettingsRepository(this._store);
-
   final JsonFileStore _store;
-
   static const String _settingsKey = 'sampler';
 
   Future<SamplerSettings> load() async {

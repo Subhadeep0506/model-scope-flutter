@@ -13,9 +13,6 @@ import '../widgets/mono_label.dart';
 import '../widgets/search_field.dart';
 import '../widgets/square_icon_button.dart';
 
-/// The models this build offers, with a search field and capability filters.
-/// Both filter a shipped manifest, so the only traffic this screen makes is
-/// one stats call per card, once per app run.
 class ModelCatalogScreen extends ConsumerStatefulWidget {
   const ModelCatalogScreen({super.key});
 
@@ -197,8 +194,6 @@ class _NoMatches extends StatelessWidget {
   );
 }
 
-/// Only a corrupt build can get here — the manifest is an asset — but the
-/// screen offers the button rather than dead-ending on a blank list.
 class _Failed extends StatelessWidget {
   const _Failed({required this.onRetry});
 

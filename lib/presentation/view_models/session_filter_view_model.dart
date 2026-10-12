@@ -10,7 +10,6 @@ enum SessionTimeFilter {
   month('Last 30 days');
 
   const SessionTimeFilter(this.label);
-
   final String label;
 
   /// Oldest `updatedAt` this filter admits, or `null` for no lower bound.
@@ -22,8 +21,6 @@ enum SessionTimeFilter {
   };
 }
 
-/// Search text plus the two dropdowns, kept out of the widget tree so the
-/// Chats screen stays a pure observer.
 class SessionFilter {
   const SessionFilter({
     this.query = '',
@@ -32,10 +29,7 @@ class SessionFilter {
   });
 
   final String query;
-
-  /// `null` means "All models".
   final String? modelId;
-
   final SessionTimeFilter time;
 
   bool get isActive =>
@@ -67,13 +61,9 @@ class SessionFilter {
 class SessionFilterViewModel extends Notifier<SessionFilter> {
   @override
   SessionFilter build() => const SessionFilter();
-
   void setQuery(String query) => state = state.copyWith(query: query);
-
   void setModel(String? modelId) =>
       state = state.copyWith(modelId: modelId, clearModel: modelId == null);
-
   void setTime(SessionTimeFilter time) => state = state.copyWith(time: time);
-
   void clear() => state = const SessionFilter();
 }

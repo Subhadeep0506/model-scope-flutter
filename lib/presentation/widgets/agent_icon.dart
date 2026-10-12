@@ -1,19 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// The glyph an agent template's `icon` token stands for.
-///
-/// Templates name an icon as a string so that `lib/data` never imports
-/// Flutter — a template is a JSON file describing an agent, not a widget. This
-/// is the one place those strings become glyphs, and an unknown one falls back
-/// to the robot rather than throwing: a template written for a later build
-/// should still draw.
-/// Every token [agentIconFor] draws something of its own for, in the order
-/// the builder's picker offers them.
-///
-/// Anything not on this list falls back to the robot, which is right for a
-/// file written against a later build but wrong to offer in a picker — there
-/// would be nothing on screen to say why the icon chosen was not the icon
-/// drawn.
 const List<String> agentIconTokens = <String>[
   'search',
   'microscope',

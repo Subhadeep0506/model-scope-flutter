@@ -12,15 +12,6 @@ import '../mono_label.dart';
 import 'labelled_field.dart';
 import 'schema_field_row.dart';
 
-/// The `Structured response` section: the `{} Fields` and `</> JSON schema`
-/// tabs from `agents-new-agent-6.png` and `-7.png`.
-///
-/// The two are two views of one schema, and **either can be the source of
-/// truth**. Normally the rows are, and the JSON is rendered from them. But a
-/// schema can say things the rows cannot draw — an `enum`, a `$ref`, a
-/// `minimum` — and simplifying one of those into what the rows understand
-/// would change what the model is allowed to emit. So when the JSON cannot be
-/// read back, it is kept as written and the Fields tab says so.
 class SchemaEditor extends ConsumerStatefulWidget {
   const SchemaEditor({super.key, required this.answer});
 
@@ -32,13 +23,7 @@ class SchemaEditor extends ConsumerStatefulWidget {
 
 class _SchemaEditorState extends ConsumerState<SchemaEditor> {
   bool _showJson = false;
-
-  /// What the JSON tab holds while it is being typed into. Null means it has
-  /// not been opened since the fields last changed, so it should be rendered
-  /// fresh.
   String? _draftJson;
-
-  /// Why the JSON will not be accepted, or null.
   String? _jsonError;
 
   @override
@@ -69,8 +54,7 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
             showJson: _showJson,
             onChanged: (value) => setState(() {
               _showJson = value;
-              // Rendered fresh each time it is opened, so it always shows
-              // what the rows currently say.
+
               if (value) _draftJson = null;
               _jsonError = null;
             }),
@@ -87,8 +71,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
     final builder = ref.read(agentBuilderViewModelProvider.notifier);
     final metrics = context.metrics;
 
-    // Held as raw because the rows cannot draw it. Showing an empty or
-    // simplified field list here would be a lie about what will be saved.
     if (answer.rawSchema != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,9 +132,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         if (widget.answer.rawSchema != null) ...<Widget>[
-          // Said here as well as on the Fields tab: someone who has just
-          // pressed `Use this schema` and been left on this tab should be
-          // told it was accepted, and why it is staying put.
           BuilderWarning(
             text:
                 'Kept exactly as written — it uses something the field '
@@ -161,8 +140,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
           SizedBox(height: metrics.gapSm),
         ],
         BuilderField(
-          // Keyed on the rendered text so reopening the tab after editing the
-          // rows refreshes the box rather than showing what was there before.
           key: ValueKey<String>(text),
           value: text,
           maxLines: null,
@@ -186,7 +163,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
     );
   }
 
-  /// The schema as it stands, indented to be read and edited.
   String _render() {
     final schema = widget.answer.toSchema();
     if (schema == null) return '';
@@ -204,8 +180,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (error) {
-      // The text is left exactly as typed: losing someone's work because of a
-      // missing comma would be the worst possible response to a typo.
       setState(() => _jsonError = 'That is not valid JSON. ${error.message}');
       return;
     }
@@ -221,8 +195,7 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
     setState(() {
       _jsonError = null;
       _draftJson = null;
-      // Back to the rows when they can show it; staying on the JSON tab when
-      // they cannot, since that is now the only honest view of it.
+
       _showJson = widget.answer.rawSchema != null;
     });
   }
@@ -234,7 +207,6 @@ class _SchemaEditorState extends ConsumerState<SchemaEditor> {
   }
 }
 
-/// The `Structured response` switch and its caption.
 class _Toggle extends StatelessWidget {
   const _Toggle({
     required this.isOn,

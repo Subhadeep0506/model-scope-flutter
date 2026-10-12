@@ -5,13 +5,6 @@ import '../../../config/theme/app_palette.dart';
 import '../../view_models/agent_builder_state.dart';
 import '../mono_label.dart';
 
-/// What a step is wired to read.
-///
-/// The mockups draw this as a single-choice dropdown. It is a multi-select
-/// here because the format stores a list and the shipped agents use it — the
-/// Weather Report's answer reads two things at once, so a one-value control
-/// could not express an agent this build ships with. It also lists earlier
-/// steps as well as inputs, which the mockups do not.
 class ReadsPicker extends StatelessWidget {
   const ReadsPicker({
     super.key,
@@ -20,7 +13,6 @@ class ReadsPicker extends StatelessWidget {
     required this.onToggle,
   });
 
-  /// Everything this step may read: inputs, and the steps before it.
   final List<DraftReference> available;
 
   final List<String> selected;
@@ -38,8 +30,6 @@ class ReadsPicker extends StatelessWidget {
         SizedBox(height: metrics.gapSm),
         if (available.isEmpty)
           Text(
-            // The first step of an agent with no inputs. Saying so beats an
-            // empty box the user taps at.
             'Nothing to read yet — add an input, or a step above this one.',
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: palette.muted),

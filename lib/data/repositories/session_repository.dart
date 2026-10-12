@@ -7,16 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_session.dart';
 import 'local_session_repository.dart';
 
-/// Storage for chat sessions, backed by shared preferences.
-/// [SharedPreferencesAsync] reads and writes on demand, so nothing has to be
-/// primed in `main()`. Encoding and decoding run on [compute]: a transcript
-/// grows without bound, unlike a preference flag.
 class SessionRepository {
   const SessionRepository(this._prefs, this._legacy);
-
   final SharedPreferencesAsync _prefs;
-
-  /// The store sessions used to live in. Read once, to migrate.
   final LocalSessionRepository _legacy;
 
   static const String _key = 'sessions';
@@ -26,7 +19,6 @@ class SessionRepository {
     final raw = await _prefs.getString(_key);
     if (raw != null) return _parse(raw);
 
-    // A first run, or an upgrade from the build that wrote sessions.json.
     final legacy = await _legacy.load();
     if (legacy.isEmpty) return legacy;
     developer.log(
@@ -44,8 +36,6 @@ class SessionRepository {
     await _prefs.setString(_key, await compute(jsonEncode, document));
   }
 
-  /// Turns a stored document back into sessions, skipping any single one that
-  /// will not parse rather than losing the whole list to it.
   static Future<List<ChatSession>> _parse(String raw) async {
     final decoded = await compute(_decode, raw);
     final entries = decoded?[_key];
@@ -69,8 +59,6 @@ class SessionRepository {
   }
 }
 
-/// Returns null when the stored string is not a JSON object, so a corrupt
-/// value reads as "nothing saved" instead of taking the app down on launch.
 Map<String, dynamic>? _decode(String raw) {
   try {
     final decoded = jsonDecode(raw);

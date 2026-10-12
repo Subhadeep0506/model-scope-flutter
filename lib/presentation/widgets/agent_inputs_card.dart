@@ -8,11 +8,6 @@ import '../../config/theme/app_palette.dart';
 import '../../data/models/agent_template.dart';
 import 'section_card.dart';
 
-/// The `Configure inputs` expander and the fields inside it.
-///
-/// Collapsed to start with, because the common case is `Run with defaults` —
-/// every bundled agent ships with values that work. Opening it is what turns
-/// the run button into `Run configured`.
 class AgentInputsCard extends StatelessWidget {
   const AgentInputsCard({
     super.key,
@@ -25,15 +20,9 @@ class AgentInputsCard extends StatelessWidget {
   });
 
   final List<AgentInput> inputs;
-
-  /// What each input currently holds, by input name.
   final Map<String, String> values;
-
   final bool expanded;
-
-  /// False while a run is going, so the fields cannot be edited underneath it.
   final bool enabled;
-
   final VoidCallback onToggle;
   final void Function(String name, String value) onChanged;
 
@@ -116,8 +105,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// One labelled field. A choice is a dropdown, a number gets the numeric
-/// keyboard, and a file opens the platform picker.
 class _Field extends StatefulWidget {
   const _Field({
     required this.input,
@@ -143,8 +130,7 @@ class _FieldState extends State<_Field> {
   @override
   void didUpdateWidget(_Field old) {
     super.didUpdateWidget(old);
-    // Only when something other than typing changed it — writing the value
-    // back on every keystroke would move the caret to the end of the line.
+
     if (widget.value != _controller.text && widget.value != old.value) {
       _controller.text = widget.value;
     }
@@ -204,10 +190,6 @@ class _FieldState extends State<_Field> {
   }
 }
 
-/// The name of the picked file and a button to change it.
-///
-/// Read-only: the path is the platform's, and a user typing one by hand on a
-/// phone would be typing somewhere the app almost certainly cannot read.
 class _FilePick extends ConsumerWidget {
   const _FilePick({
     required this.value,
@@ -260,8 +242,7 @@ class _FilePick extends ConsumerWidget {
 
   Future<void> _pick(WidgetRef ref) async {
     final path = await ref.read(documentPickerProvider).pick();
-    // Null is a cancel, which must leave the previous choice alone rather
-    // than clearing it.
+
     if (path != null) onChanged(path);
   }
 }

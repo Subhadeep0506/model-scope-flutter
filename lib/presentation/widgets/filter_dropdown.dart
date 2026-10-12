@@ -4,11 +4,8 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import 'icon_tile.dart';
 
-/// One choice in a [FilterDropdown].
 typedef FilterOption<T> = ({T value, String label});
 
-/// The soft-filled chip with a leading glyph and a trailing chevron used for
-/// "All models" and "All time" on the Chats screen.
 class FilterDropdown<T> extends StatelessWidget {
   const FilterDropdown({
     super.key,
@@ -21,7 +18,6 @@ class FilterDropdown<T> extends StatelessWidget {
 
   final IconData icon;
 
-  /// Describes the control itself, e.g. "Filter by model".
   final String semanticLabel;
 
   final T value;

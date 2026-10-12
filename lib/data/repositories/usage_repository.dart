@@ -3,26 +3,10 @@ import 'dart:developer' as developer;
 import '../models/usage_record.dart';
 import '../sources/json_file_store.dart';
 
-/// The permanent record of what the models on this device have done.
-///
-/// Separate from sessions on purpose. Home used to fold its figures out of the
-/// stored transcripts, so deleting a chat lowered the lifetime token count and
-/// erased a model from the usage list — the work had still happened, and the
-/// dashboard said otherwise. Nothing here is ever removed by deleting a
-/// session; only [_recentWindow] ages out, and only the day-by-day chart reads
-/// that part.
 class UsageRepository {
   const UsageRepository(this._store);
-
   final JsonFileStore _store;
-
-  /// How far back individual records are kept. The latency chart covers seven
-  /// days; thirty leaves room to widen it without another migration, and caps
-  /// what the file can grow to on a device where storage is the user's.
   static const Duration _recentWindow = Duration(days: 30);
-
-  /// A ceiling as well as a window, for the pathological case of thousands of
-  /// replies inside thirty days.
   static const int _recentLimit = 2000;
 
   static const String _recentKey = 'recent';
@@ -43,20 +27,12 @@ class UsageRepository {
     );
   }
 
-  /// Adds [record] and writes the ledger back.
-  ///
-  /// Returns what was written, so a caller holding the ledger in state does
-  /// not have to read the file again to show the new figure.
   Future<UsageLedger> add(UsageRecord record) async {
     final ledger = (await load()).plus(record);
     await save(ledger);
     return ledger;
   }
 
-  /// Folds [records] in at once and marks the ledger migrated.
-  ///
-  /// Used for the one-time import of replies that were already on the device
-  /// when the ledger was introduced.
   Future<UsageLedger> importOnce(List<UsageRecord> records) async {
     var ledger = await load();
     if (ledger.migrated) return ledger;
@@ -91,11 +67,6 @@ class UsageRepository {
     });
   }
 
-  /// Records inside the window, newest kept when the ceiling bites.
-  ///
-  /// Only [UsageLedger.recent] is pruned. The totals it was folded into are
-  /// already counted and stay exactly as they are — which is what makes a
-  /// lifetime figure a lifetime figure.
   static List<UsageRecord> _prune(List<UsageRecord> records, {DateTime? now}) {
     final cutoff = (now ?? DateTime.now()).subtract(_recentWindow);
     final kept = <UsageRecord>[
@@ -116,7 +87,6 @@ class UsageRepository {
       try {
         records.add(UsageRecord.fromJson(entry));
       } catch (error) {
-        // One unreadable row should not cost the whole history.
         developer.log('Skipped an unreadable usage record', name: _logName);
       }
     }

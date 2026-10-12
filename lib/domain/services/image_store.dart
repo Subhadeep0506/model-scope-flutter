@@ -3,10 +3,7 @@ import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 
-/// Holds the images attached to messages. The system picker hands back a path
-/// into a temporary directory the platform is free to empty, and `nobodywho`
-/// re-reads an image from its path — so the app keeps its own copy, under the
-/// directory sessions live in, and that copy is what a message points at.
+/// Holds the images attached to messages. 
 class ImageStore {
   const ImageStore(this._documents);
 
@@ -36,8 +33,6 @@ class ImageStore {
     }
   }
 
-  /// Deletes copies this store made. Paths it does not own are ignored, so a
-  /// message written by an older build cannot delete anything unexpected.
   Future<void> delete(Iterable<String> paths) async {
     final folder = '${_documents.path}/$_folder';
     for (final path in paths) {

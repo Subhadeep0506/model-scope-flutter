@@ -4,8 +4,6 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import '../../data/models/catalog_model.dart';
 
-/// `All · Text to text · Image to text · Tool calling`, scrolling sideways
-/// rather than wrapping, so adding a chip cannot move the heading below it.
 class CapabilityFilterBar extends StatelessWidget {
   const CapabilityFilterBar({
     super.key,
@@ -13,10 +11,8 @@ class CapabilityFilterBar extends StatelessWidget {
     required this.onSelected,
   });
 
-  /// The active capability, or null for `All`.
   final ModelCapability? selected;
 
-  /// Called with null when `All` is tapped.
   final ValueChanged<ModelCapability?> onSelected;
 
   @override
@@ -60,9 +56,6 @@ class _FilterChip extends StatelessWidget {
     final palette = context.palette;
     final metrics = context.metrics;
 
-    // One node for the whole chip. Without `container` and `excludeSemantics`
-    // a screen reader announces it twice and the selected state lands on
-    // neither reading.
     return Semantics(
       container: true,
       button: true,

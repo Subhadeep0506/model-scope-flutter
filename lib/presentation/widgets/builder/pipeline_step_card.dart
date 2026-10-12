@@ -12,12 +12,6 @@ import 'labelled_field.dart';
 import 'reads_picker.dart';
 import 'tool_picker_grid.dart';
 
-/// One numbered step in the `Pipeline` section.
-///
-/// Draws what the mockups draw, less the per-step `MODEL` dropdown: every step
-/// of a run uses the run's one model, so a control for it would do nothing.
-/// It gains a prompt field on a tool step, which the mockups leave out and
-/// every agent this build ships uses.
 class PipelineStepCard extends ConsumerWidget {
   const PipelineStepCard({
     super.key,
@@ -33,7 +27,6 @@ class PipelineStepCard extends ConsumerWidget {
   final bool isFirst;
   final bool isLast;
 
-  /// What this step may read — inputs, and the steps above it.
   final List<DraftReference> available;
 
   @override
@@ -165,7 +158,6 @@ class _Action extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  /// Null greys it out — the first step cannot move up.
   final VoidCallback? onPressed;
 
   @override
@@ -180,7 +172,6 @@ class _Action extends StatelessWidget {
   );
 }
 
-/// The `Tool | Reason` pair.
 class _KindToggle extends ConsumerWidget {
   const _KindToggle({required this.step});
 

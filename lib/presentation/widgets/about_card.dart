@@ -4,12 +4,9 @@ import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 import 'section_card.dart';
 
-/// Version and runtime line at the foot of Settings.
 class AboutCard extends StatelessWidget {
   const AboutCard({super.key});
 
-  /// Kept in step with `pubspec.yaml`'s `version:` by hand. Reading it at
-  /// runtime would cost a whole dependency for one string.
   static const String version = '0.0.1';
 
   @override

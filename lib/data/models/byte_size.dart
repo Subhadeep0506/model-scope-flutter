@@ -1,6 +1,3 @@
-/// Formats a byte count the way every size label in the mockups is drawn.
-/// Decimal units, like Hugging Face: `1.10 GB` is 1.10 × 10⁹ bytes, not a
-/// gibibyte. One helper, so no two size labels in the app can disagree.
 String formatBytes(int bytes) {
   const int mb = 1000 * 1000;
   const int gb = 1000 * mb;
@@ -12,7 +9,6 @@ String formatBytes(int bytes) {
   return '$bytes B';
 }
 
-/// Abbreviates a download count, matching `182k downloads` in the mockup.
 String formatCount(int count) {
   if (count >= 1000000) {
     final millions = count / 1000000;

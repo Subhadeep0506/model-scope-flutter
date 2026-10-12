@@ -10,7 +10,6 @@ import '../mono_label.dart';
 import '../section_card.dart';
 import 'labelled_field.dart';
 
-/// The `Inputs` section: what the user is asked for before a run.
 class InputsEditor extends ConsumerWidget {
   const InputsEditor({super.key, required this.inputs});
 
@@ -83,9 +82,7 @@ class _InputCard extends ConsumerWidget {
             ],
           ),
           SizedBox(height: metrics.gapSm),
-          // The name is what a prompt writes as `{{input.x}}`, so it is shown
-          // rather than hidden — a step reading the wrong one is a confusing
-          // failure to work backwards from.
+
           Row(
             children: <Widget>[
               const MonoLabel('READ AS', variant: MonoStyle.overline),
@@ -120,11 +117,6 @@ class _InputCard extends ConsumerWidget {
   }
 }
 
-/// The choices a `Choice` input offers, and which one it starts on.
-///
-/// Shown only for a choice, because the validator rejects one with no options
-/// — so the editor appears the moment the type is picked rather than leaving
-/// the user to find out on save.
 class _Options extends ConsumerWidget {
   const _Options({required this.input});
 

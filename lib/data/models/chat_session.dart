@@ -4,7 +4,6 @@ import 'chat_message.dart';
 
 part 'chat_session.g.dart';
 
-/// A named conversation, as listed on the Chats screen.
 @JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class ChatSession {
   const ChatSession({
@@ -22,7 +21,6 @@ class ChatSession {
   final String id;
   final String title;
 
-  /// Id of the [ModelDescriptor] this session talks to.
   final String modelId;
 
   final DateTime createdAt;

@@ -6,12 +6,6 @@ import '../../../domain/services/schema_fields.dart';
 import '../mono_label.dart';
 import 'labelled_field.dart';
 
-/// One field in the `{} Fields` tab, and its children if it has any.
-///
-/// Recursive, because a schema is: an object holds fields, and an array of
-/// objects holds them too. The rows mutate the [SchemaField] in place and call
-/// [onChanged] to redraw — the alternative, rebuilding an immutable tree, would
-/// mean threading an index path down through every level for every keystroke.
 class SchemaFieldRow extends StatelessWidget {
   const SchemaFieldRow({
     super.key,
@@ -22,13 +16,8 @@ class SchemaFieldRow extends StatelessWidget {
   });
 
   final SchemaField field;
-
-  /// Called after any edit anywhere beneath this row.
   final VoidCallback onChanged;
-
   final VoidCallback onRemove;
-
-  /// How deep this row is nested, which only sets the indent.
   final int depth;
 
   @override
@@ -107,7 +96,6 @@ class SchemaFieldRow extends StatelessWidget {
   }
 }
 
-/// The nested rows of an object, or of an array's items.
 class _Children extends StatelessWidget {
   const _Children({
     required this.children,
@@ -130,8 +118,6 @@ class _Children extends StatelessWidget {
         children: <Widget>[
           for (final child in children)
             SchemaFieldRow(
-              // The object itself is the key: a row has no id of its own, and
-              // identity has to survive the one above it being deleted.
               key: ObjectKey(child),
               field: child,
               depth: depth + 1,
@@ -158,7 +144,6 @@ class _Children extends StatelessWidget {
   }
 }
 
-/// The `ITEMS OF` dropdown an array carries.
 class _ItemsOf extends StatelessWidget {
   const _ItemsOf({required this.field, required this.onChanged});
 
@@ -173,8 +158,7 @@ class _ItemsOf extends StatelessWidget {
       Expanded(
         child: _TypeDropdown(
           value: field.itemType,
-          // An array of arrays is not something a row can draw, and the
-          // conversion refuses to read one back.
+
           exclude: const <SchemaFieldType>{SchemaFieldType.array},
           onChanged: (type) {
             field.itemType = type;
@@ -209,9 +193,6 @@ class _RequiredToggle extends StatelessWidget {
       SizedBox(width: context.metrics.gapSm),
       Expanded(
         child: Text(
-          // Worth spelling out: the sampler forces every required field, so
-          // requiring one the material cannot support makes the model invent
-          // a value rather than leave it out.
           'Required — the model must fill this in',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: context.palette.muted),

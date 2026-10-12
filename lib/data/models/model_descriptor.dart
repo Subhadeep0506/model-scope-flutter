@@ -6,8 +6,6 @@ import 'gguf_file.dart';
 
 part 'model_descriptor.g.dart';
 
-/// A GGUF model the user has downloaded and the app can load — everything
-/// needed to load the weights, name them in the UI and delete them again.
 @JsonSerializable(fieldRename: FieldRename.snake)
 class ModelDescriptor {
   const ModelDescriptor({
@@ -25,8 +23,6 @@ class ModelDescriptor {
   factory ModelDescriptor.fromJson(Map<String, dynamic> json) =>
       _$ModelDescriptorFromJson(json);
 
-  /// Builds an entry from the catalog row and file the user downloaded, so an
-  /// installed model is titled exactly as the catalog titled it.
   factory ModelDescriptor.installed({
     required CatalogModel model,
     required GgufFile file,
@@ -44,42 +40,27 @@ class ModelDescriptor {
     isEmbedding: model.isEmbedding,
   );
 
-  /// `bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF`, shown in mono under the
-  /// title of each installed-model row.
   final String repoId;
 
-  /// The `.gguf` file inside [repoId].
   final String fileName;
 
-  /// Display name, e.g. `Qwen2.5 Coder 1.5B Instruct`.
   final String name;
 
-  /// Quantisation tag shown in mono, e.g. `Q4_K_M`.
   final String quantization;
 
   final int sizeBytes;
 
-  /// Absolute path to the weights. Stored rather than rebuilt from the id, so
-  /// entries written by earlier builds — which point into `nobodywho`'s own
-  /// cache rather than the app's support directory — keep working.
   final String localPath;
 
   final DateTime installedAt;
 
-  /// `1.5B`. Null when the repository name does not state one.
   final String? paramLabel;
 
-  /// Whether this encodes text rather than answering it.
-  ///
-  /// Defaults to false, which is right for every record written before
-  /// embedding models existed: everything installed then was a chat model.
   @JsonKey(defaultValue: false)
   final bool isEmbedding;
 
-  /// Unique and stable: the same file from the same repo is the same model.
   String get id => '$repoId/$fileName';
 
-  /// `1.12 GB`, matching the mono size chip in the mockup.
   String get sizeLabel => formatBytes(sizeBytes);
 
   Map<String, dynamic> toJson() => _$ModelDescriptorToJson(this);

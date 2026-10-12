@@ -6,8 +6,6 @@ import '../../data/models/chat_message.dart';
 import 'image_thumbnail.dart';
 import 'markdown_text.dart';
 
-/// A question, drawn as a filled bubble hugging the right edge. Replies
-/// deliberately have no bubble — that asymmetry is what the mockup calls for.
 class UserBubble extends StatelessWidget {
   const UserBubble({super.key, required this.message});
 
@@ -22,7 +20,6 @@ class UserBubble extends StatelessWidget {
       builder: (context, constraints) => Align(
         alignment: Alignment.centerRight,
         child: ConstrainedBox(
-          // Wide messages stop at the measured 68%; short ones still hug.
           constraints: BoxConstraints(
             maxWidth: constraints.maxWidth * metrics.bubbleMaxWidthFactor,
           ),

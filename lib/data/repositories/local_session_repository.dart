@@ -3,13 +3,9 @@ import 'dart:developer' as developer;
 import '../models/chat_session.dart';
 import '../sources/json_file_store.dart';
 
-/// The `sessions.json` file chat sessions used to live in. Kept only as the
-/// migration source `SessionRepository` reads once, on an upgrade.
 class LocalSessionRepository {
   const LocalSessionRepository(this._store);
-
   final JsonFileStore _store;
-
   static const String _sessionsKey = 'sessions';
 
   Future<List<ChatSession>> load() async {
@@ -23,7 +19,6 @@ class LocalSessionRepository {
       try {
         sessions.add(ChatSession.fromJson(entry));
       } catch (error, stackTrace) {
-        // Skip a single unreadable session rather than losing the whole list.
         developer.log(
           'Dropped an unreadable session',
           name: 'LocalSessionRepository',

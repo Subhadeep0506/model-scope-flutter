@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../config/theme/app_palette.dart';
 
-/// A Settings section title, optionally with a text action on the right.
 class SectionHeading extends StatelessWidget {
   const SectionHeading({
     super.key,
@@ -14,12 +13,9 @@ class SectionHeading extends StatelessWidget {
 
   final String title;
 
-  /// Omit for a heading with no trailing action.
   final String? actionLabel;
   final VoidCallback? onAction;
 
-  /// Overrides the muted title colour. Home draws its section titles in ink,
-  /// where they separate whole blocks rather than label a settings group.
   final Color? color;
 
   @override

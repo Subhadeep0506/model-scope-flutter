@@ -9,18 +9,11 @@ import 'mono_chip.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One row of the Models used list: what a model is, how much work it has done
-/// and which quant answered. Models that have never answered appear at zero —
-/// an unused model on disk is a gigabyte the user may want back. A model that
-/// has been deleted keeps its row too, greyed and labelled: the replies it
-/// produced are still part of what this device has done.
 class ModelUsageCard extends StatelessWidget {
   const ModelUsageCard({super.key, required this.usage, required this.now});
 
   final ModelUsage usage;
 
-  /// Passed in rather than read from the clock, so the row is a pure function
-  /// of its inputs and a test can pin the "4h ago".
   final DateTime now;
 
   @override
@@ -67,7 +60,6 @@ class ModelUsageCard extends StatelessWidget {
     );
   }
 
-  /// `148 runs · 310ms · 4h ago`, or `0 runs · never used`.
   String get _summary {
     final last = usage.lastUsedAt;
     if (usage.runs == 0 || last == null) return '0 runs · never used';

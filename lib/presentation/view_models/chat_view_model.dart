@@ -17,21 +17,14 @@ import '../../domain/services/token_collector.dart';
 import 'chat_state.dart';
 import 'sessions_view_model.dart';
 
-/// Drives one open conversation. Only one chat screen exists at a time, so
-/// this holds the open session directly, which also keeps the single loaded
-/// model and this view model in step.
 class ChatViewModel extends Notifier<ChatState> {
   static const String _logName = 'ChatViewModel';
   static const Uuid _uuid = Uuid();
-
-  /// How much of the first message becomes the session title.
   static const int _titleLength = 38;
 
   @override
   ChatState build() => const ChatState();
 
-  /// Loads [sessionId], the weights, and replays the transcript into the
-  /// model's context so a reopened session continues rather than starting cold.
   Future<void> open(String sessionId) async {
     await ref.read(sessionsViewModelProvider.future);
     final session = ref
@@ -73,8 +66,6 @@ class ChatViewModel extends Notifier<ChatState> {
     await _generate(prompt, images);
   }
 
-  /// Puts the model's context back in step with the user's memory budget.
-  /// A no-op on most turns — see [needsHistoryReseat] for when it is not.
   Future<void> _reseat(List<ChatMessage> prior) async {
     final turns = await _historyTurns();
     if (!needsHistoryReseat(prior, turns)) return;
@@ -86,7 +77,6 @@ class ChatViewModel extends Notifier<ChatState> {
   Future<int> _historyTurns() async =>
       (await ref.read(samplerViewModelProvider.future)).historyTurns;
 
-  /// Drops the last reply and asks the preceding question again.
   Future<void> regenerate() async {
     if (!state.canRegenerate) return;
     final messages = state.messages;
@@ -94,14 +84,10 @@ class ChatViewModel extends Notifier<ChatState> {
     if (prompt < 0) return;
 
     await _commit(messages.sublist(0, prompt + 1));
-    // Rewind the model's context to just before the question, otherwise the
-    // discarded reply would still be in scope when it answers again.
     final turns = await _historyTurns();
     await ref
         .read(llmServiceProvider)
         .restoreHistory(historyWindow(messages.sublist(0, prompt), turns));
-    // The same question means the same images: asking again without them
-    // would be a different question.
     await _generate(messages[prompt].text, messages[prompt].imagePaths);
   }
 
@@ -110,15 +96,10 @@ class ChatViewModel extends Notifier<ChatState> {
     ref.read(llmServiceProvider).stop();
   }
 
-  /// Copies the image the user picked into the app's own storage and holds it
-  /// for the next message. The picker hands back a path the platform may
-  /// empty, so the copy is what the message ends up pointing at.
   Future<void> attach(String sourcePath) async {
     if (!state.canAttach) return;
     final stored = await ref.read(imageStoreProvider).save(sourcePath);
     if (stored == null) return;
-    // Re-checked: the picker is a round trip through another app, and the
-    // model may have been switched for a blind one while it was open.
     if (!state.canAttach) {
       await ref.read(imageStoreProvider).delete(<String>[stored]);
       return;
@@ -126,8 +107,6 @@ class ChatViewModel extends Notifier<ChatState> {
     state = state.copyWith(attachments: <String>[...state.attachments, stored]);
   }
 
-  /// Drops an image from the composer, deleting the copy with it — it was
-  /// never on a message, so nothing else can be pointing at it.
   Future<void> removeAttachment(String path) async {
     state = state.copyWith(
       attachments: <String>[
@@ -143,8 +122,6 @@ class ChatViewModel extends Notifier<ChatState> {
   Future<void> _prepare() async {
     final llm = ref.read(llmServiceProvider);
     try {
-      // Awaited, not read, so a cold start waits for models.json instead of
-      // deciding nothing is installed.
       final library = await ref.read(modelLibraryViewModelProvider.future);
       final model = library.active;
       if (model == null) {
@@ -158,9 +135,6 @@ class ChatViewModel extends Notifier<ChatState> {
 
       final settings = await ref.read(samplerViewModelProvider.future);
       final projector = library.projectorFor(model.repoId)?.localPath;
-      // Reload when the user switched models in Settings: the loaded weights
-      // are still valid, they are simply the wrong ones. A projector that has
-      // arrived since counts too — the weights in memory were loaded blind.
       var notice = state.notice;
       if (!llm.isLoaded ||
           llm.loadedModelId != model.id ||
@@ -191,8 +165,6 @@ class ChatViewModel extends Notifier<ChatState> {
     }
   }
 
-  /// Loads [model], falling back to the CPU — see [loadWithFallback], which
-  /// an agent run shares.
   Future<String?> _load(
     ModelDescriptor model,
     SamplerSettings settings,
@@ -235,13 +207,7 @@ class ChatViewModel extends Notifier<ChatState> {
   }
 
   /// Writes this reply into the lifetime ledger.
-  ///
-  /// Separate from the session it was stored in on purpose: the session can
-  /// be deleted, and the work it represents still happened. Only successful
-  /// replies count — a generation that failed has no throughput to average.
   Future<void> _recordUsage(GenerationMetrics metrics) async {
-    // Leaving the chat mid-reply disposes this notifier; reaching for a
-    // provider through a dead ref throws.
     if (!ref.mounted) return;
 
     final model = ref.read(activeModelProvider);
@@ -263,7 +229,6 @@ class ChatViewModel extends Notifier<ChatState> {
         );
   }
 
-  /// Consumes the token stream. Returns an error description, or `null`.
   Future<String?> _drain(
     String prompt,
     List<String> images,
@@ -343,8 +308,6 @@ class ChatViewModel extends Notifier<ChatState> {
     return -1;
   }
 
-  /// Kept apart from [_describeGeneration]: a model that never loaded has
-  /// generated nothing, and "Generation failed" would misdirect the user.
   static String _describeLoad(Object error) => switch (error) {
     ModelMissingException() => error.toString(),
     ModelLoadException() => error.toString(),

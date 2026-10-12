@@ -100,8 +100,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  /// `Models · 8.06 GB` — the heading doubles as the only place the user can
-  /// see what the library costs in total.
   static String _modelsTitle(ModelLibrary? library) {
     if (library == null || library.isEmpty) return 'Models';
     return 'Models · ${formatBytes(library.totalBytes)}';
@@ -172,10 +170,6 @@ class _ModelList extends ConsumerWidget {
     );
   }
 
-  /// Deleting weights means re-downloading gigabytes, so it asks first — the
-  /// same dialog the Chats list uses before deleting a session. A repository
-  /// with a projector gets a third action, because the projector is shared
-  /// and the user is the only one who knows whether they are done with it.
   Future<void> _confirmRemove(
     BuildContext context,
     WidgetRef ref,

@@ -3,14 +3,10 @@ import 'dart:developer' as developer;
 import '../models/app_settings.dart';
 import '../sources/json_file_store.dart';
 
-/// Storage for the appearance and runtime-default settings. Shares
-/// `settings.json` with the sampler settings, so writes go through
-/// [JsonFileStore.merge] rather than overwriting the whole document.
 class AppSettingsRepository {
   const AppSettingsRepository(this._store);
 
   final JsonFileStore _store;
-
   static const String _appKey = 'app';
 
   Future<AppSettings> load() async {

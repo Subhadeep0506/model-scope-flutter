@@ -8,12 +8,6 @@ import '../../data/models/relative_time.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// What the Document QnA agent has indexed, and a way to throw it away.
-///
-/// The agent re-indexes whatever file you pick, so this is not needed to
-/// change documents — it is here because the vectors of a document the user
-/// has finished with are theirs to be rid of, and nothing else on the phone
-/// shows that they exist.
 class DocumentIndexCard extends ConsumerWidget {
   const DocumentIndexCard({super.key});
 
@@ -56,8 +50,6 @@ class DocumentIndexCard extends ConsumerWidget {
           ),
           SizedBox(height: metrics.gapMd),
           OutlinedButton.icon(
-            // Disabled rather than hidden, so the card reads the same whether
-            // or not anything is indexed.
             onPressed: index.chunks == 0
                 ? null
                 : ref.read(documentIndexProvider.notifier).clear,

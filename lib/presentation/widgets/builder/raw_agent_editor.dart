@@ -13,15 +13,6 @@ import '../mono_label.dart';
 import '../square_icon_button.dart';
 import 'labelled_field.dart';
 
-/// The whole agent as the file on disk, editable.
-///
-/// The form draws a control for most of the format but not all of it, and
-/// there is no control at all for the things a format grows later. This is the
-/// escape hatch: paste an agent, change one field, save. It is also the
-/// quickest way to hand the sampler a schema the field rows would never
-/// produce, which is most of how a structured response gets tested.
-///
-/// Pops `true` when it saved, so the builder behind it knows to close too.
 class RawAgentEditor extends ConsumerStatefulWidget {
   const RawAgentEditor({super.key, required this.draft});
 
@@ -36,8 +27,6 @@ class _RawAgentEditorState extends ConsumerState<RawAgentEditor> {
   String? _error;
   bool _saving = false;
 
-  /// The draft as it stands. An unsaved agent has no id yet, so a placeholder
-  /// stands in — editing it is how an agent gets an id of its own choosing.
   String _render() {
     final template = widget.draft.toTemplate(
       id: widget.draft.id ?? 'new_agent',
@@ -161,10 +150,6 @@ class _RawAgentEditorState extends ConsumerState<RawAgentEditor> {
     }
   }
 
-  /// The text as a template, or null with [_error] set.
-  ///
-  /// The text is never discarded on a failure — losing someone's edit over a
-  /// missing comma would be the worst possible response to a typo.
   AgentTemplate? _parse() {
     final Object? decoded;
     try {
@@ -188,7 +173,6 @@ class _RawAgentEditorState extends ConsumerState<RawAgentEditor> {
       setState(() => _error = null);
       return template;
     } catch (error) {
-      // A field of the wrong type, an unknown step kind, a missing `answer`.
       setState(
         () => _error =
             'That is not an agent this build can read.\n'

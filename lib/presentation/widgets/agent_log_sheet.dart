@@ -8,15 +8,6 @@ import '../../data/models/agent_log.dart';
 import 'mono_label.dart';
 import 'sheet_scaffold.dart';
 
-/// Everything a run actually sent and received, behind the `Show logs` button.
-///
-/// The trace says a step called `web_search("sony wh-1000xm5")` and took a
-/// second. This says which prompt produced that call, what arguments the model
-/// chose, and the whole of what came back — which is what separates "the model
-/// ignored the tool" from "the tool returned nothing useful".
-///
-/// Only reachable while the run that produced the lines is still on screen:
-/// logs are not written to the history file. See [AgentLogEntry] for why.
 class AgentLogSheet extends StatelessWidget {
   const AgentLogSheet({super.key, required this.entries});
 
@@ -84,8 +75,7 @@ class _LogRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        // Selectable so one prompt or one tool result can be lifted out on its
-        // own, without copying the whole log.
+
         SelectableText(
           entry.text,
           style: AppTypography.mono(

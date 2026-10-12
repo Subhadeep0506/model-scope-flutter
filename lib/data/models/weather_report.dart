@@ -1,9 +1,5 @@
 import 'json_read.dart';
 
-/// Where a place name resolved to. Open-Meteo's forecast endpoint takes
-/// coordinates only, so every name the user types costs a geocoding call
-/// first, and the resolved name is what the report should quote back — the
-/// user typed `Delhi`, the answer should say which Delhi it found.
 class GeocodedPlace {
   const GeocodedPlace({
     required this.name,
@@ -18,8 +14,7 @@ class GeocodedPlace {
     latitude: readDouble(json['latitude']),
     longitude: readDouble(json['longitude']),
     country: readStringOrNull(json['country']),
-    // The region within the country, e.g. `England`. Disambiguates the
-    // dozen Springfields without quoting coordinates at the user.
+
     admin1: readStringOrNull(json['admin1']),
   );
 
@@ -29,11 +24,9 @@ class GeocodedPlace {
   final String? country;
   final String? admin1;
 
-  /// `Springfield, Illinois, United States` — as much as is known, no more.
   String get label => <String>[name, ?admin1, ?country].join(', ');
 }
 
-/// One day of the forecast.
 class DailyForecast {
   const DailyForecast({
     required this.date,
@@ -65,21 +58,17 @@ class DailyForecast {
     );
   }
 
-  /// `2026-10-07`, as Open-Meteo gives it.
   final String date;
 
   final double minTemp;
   final double maxTemp;
   final double precipitationMm;
 
-  /// Percent. Zero when the endpoint did not report one.
   final int precipitationChance;
 
-  /// WMO code. -1 when absent, which [describeWeatherCode] reads as unknown.
   final int weatherCode;
 }
 
-/// The weather at one place: now, and the next few days.
 class LocationWeather {
   const LocationWeather({
     required this.place,
@@ -113,7 +102,7 @@ class LocationWeather {
       humidity: readInt(current['relative_humidity_2m']),
       windSpeed: readDouble(current['wind_speed_10m']),
       weatherCode: readInt(current['weather_code'], fallback: -1),
-      // Dark at 8am tells a traveller something a temperature does not.
+
       isDay: readInt(current['is_day'], fallback: 1) == 1,
       temperatureUnit: readString(units['temperature_2m'], fallback: '°'),
       windUnit: readString(units['wind_speed_10m'], fallback: ''),
@@ -128,47 +117,33 @@ class LocationWeather {
   final double temperature;
   final double feelsLike;
 
-  /// Percent.
   final int humidity;
 
   final double windSpeed;
 
-  /// WMO code. -1 when absent.
   final int weatherCode;
 
   final bool isDay;
 
-  /// Today first. Empty when the endpoint returned no daily block.
   final List<DailyForecast> days;
 
-  /// `°C` or `°F`, as the endpoint labelled it — rather than inferred from
-  /// what was asked for, which would be a guess the response can settle.
   final String temperatureUnit;
 
-  /// `km/h` or `mp/h`.
   final String windUnit;
 
   String get condition => describeWeatherCode(weatherCode);
 }
 
-/// Every location asked about, and the names that resolved to nothing.
 class WeatherReport {
   const WeatherReport({required this.locations, this.unresolved = const []});
 
   final List<LocationWeather> locations;
 
-  /// Names the geocoder could not place. Kept rather than dropped: a model
-  /// told nothing about `Atlantis` would quietly report on four cities when
-  /// it was asked about five.
   final List<String> unresolved;
 
   bool get isEmpty => locations.isEmpty;
 }
 
-/// The WMO weather code in words.
-///
-/// Open-Meteo reports conditions as a number, which means nothing to a
-/// language model. The groupings are the ones the codes themselves define.
 String describeWeatherCode(int code) => switch (code) {
   0 => 'clear sky',
   1 => 'mainly clear',

@@ -3,15 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The one green button on an agent's screen.
-///
-/// Its label says what pressing it will actually do: `Run with defaults` when
-/// nothing has been edited, `Run configured` once something has, and `Stop`
-/// while a run is going — one button rather than two, as the mockups draw it.
-///
-/// Indexing is the exception: reading and encoding a long PDF takes tens of
-/// seconds before the first step runs, and a button reading `Stop` with
-/// nothing yet in the trace looks like a stalled run rather than a busy one.
 class AgentRunButton extends StatelessWidget {
   const AgentRunButton({
     super.key,
@@ -25,13 +16,8 @@ class AgentRunButton extends StatelessWidget {
 
   final bool isRunning;
   final bool usesDefaults;
-
-  /// Whether the document is still being read and encoded.
   final bool isIndexing;
-
-  /// False when something stops the agent running — no model, no key.
   final bool enabled;
-
   final VoidCallback onRun;
   final VoidCallback onStop;
 

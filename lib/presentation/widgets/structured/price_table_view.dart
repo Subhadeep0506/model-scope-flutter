@@ -7,12 +7,6 @@ import 'data_table_card.dart';
 import 'headline_chips.dart';
 import 'structured_view.dart';
 
-/// Price Comparison's answer: the offers the model found, cheapest marked.
-///
-/// The cheapest row is tinted using the model's own `cheapest_retailer`
-/// field rather than by this widget finding the lowest price itself. Picking
-/// it out is the part of the job the agent exists to test; doing it here
-/// would make the table always right and the measurement worthless.
 class PriceTableView implements StructuredView {
   const PriceTableView();
 
@@ -79,8 +73,6 @@ class PriceTableView implements StructuredView {
     );
   }
 
-  /// `₹ 25,750`, or whatever the model called the currency. Left empty when
-  /// there is no number, so the cell draws a dash.
   static String _price(Map<String, dynamic> row, String currency) {
     final value = row['price'];
     if (value is! num) return readString(row['price']);
@@ -94,11 +86,6 @@ class PriceTableView implements StructuredView {
   }
 }
 
-/// `25750.5` → `25,750.50`, `25750` → `25,750`.
-///
-/// Thousands separated because a price column is there to be compared at a
-/// glance, and trailing zeros dropped on a whole number because `₹ 25,750.00`
-/// reads as more precision than a scraped price has.
 String formatMoney(num value) {
   final rounded = (value * 100).round() / 100;
   final isWhole = rounded == rounded.truncateToDouble();

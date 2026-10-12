@@ -1,5 +1,3 @@
-/// The short relative stamp on each Home activity row: `4h ago`, `2d ago`.
-/// Coarse on purpose — one unit wide, so it never wraps.
 String formatAgo(DateTime moment, DateTime now) {
   final elapsed = now.difference(moment);
   if (elapsed.isNegative || elapsed.inMinutes < 1) return 'just now';

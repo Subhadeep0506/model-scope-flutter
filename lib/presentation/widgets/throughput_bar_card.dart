@@ -8,8 +8,6 @@ import '../../config/theme/app_typography.dart';
 import '../../data/models/home_stats.dart';
 import 'chart_card.dart';
 
-/// Mean tokens per second for each parameter size the device has run — how
-/// far up the parameter count this phone goes before generation drags.
 class ThroughputBarCard extends StatelessWidget {
   const ThroughputBarCard({super.key, required this.bars});
 
@@ -89,7 +87,6 @@ class ThroughputBarCard extends StatelessWidget {
     return bars[index].paramLabel;
   }
 
-  /// Rounds up to the next 25 tok/s, so the grid lines read as round numbers.
   double _ceiling() {
     if (bars.isEmpty) return 100;
     final highest = bars.map((bar) => bar.tokensPerSecond).reduce(math.max);

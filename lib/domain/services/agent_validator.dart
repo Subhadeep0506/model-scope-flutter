@@ -5,15 +5,10 @@ import 'agent_scope.dart';
 /// Whether an agent can run, and what stops it if not.
 class AgentAvailability {
   const AgentAvailability(this.blockers);
-
   const AgentAvailability.ready() : blockers = const <String>[];
-
-  /// One line per problem, each written to be shown as-is.
   final List<String> blockers;
 
   bool get canRun => blockers.isEmpty;
-
-  /// The first problem, which is the one the card has room for.
   String? get firstBlocker => blockers.isEmpty ? null : blockers.first;
 }
 

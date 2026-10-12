@@ -9,13 +9,9 @@ import '../../config/theme/app_typography.dart';
 import '../../data/models/home_stats.dart';
 import 'chart_card.dart';
 
-/// Time to first token over the last seven days. Days with no replies are left
-/// out rather than plotted as zero, which would claim the model answered
-/// instantly on a day nobody chatted.
 class LatencyTrendCard extends StatelessWidget {
   const LatencyTrendCard({super.key, required this.trend});
 
-  /// Matches the mockup's `Mon Tue Wed …` axis.
   static final DateFormat _weekday = DateFormat('E');
 
   final List<DailyLatency> trend;
@@ -61,7 +57,7 @@ class LatencyTrendCard extends StatelessWidget {
         preventCurveOverShooting: true,
         color: palette.primary,
         barWidth: 2.5,
-        // A single reading has no line to draw, so it shows as a point.
+
         dotData: FlDotData(show: spots.length == 1),
         belowBarData: BarAreaData(
           show: true,
@@ -108,8 +104,6 @@ class LatencyTrendCard extends StatelessWidget {
     return _weekday.format(trend[index].day);
   }
 
-  /// Rounds the axis up to the next 150ms so the grid lines land on round
-  /// numbers rather than on whatever the maximum happened to be.
   static double _ceiling(List<FlSpot> spots) {
     if (spots.isEmpty) return 600;
     final highest = spots.map((spot) => spot.y).reduce(math.max);

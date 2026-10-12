@@ -6,7 +6,7 @@
          merged in from the plugin's own manifest. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:label="model_scope_flutter"
+        android:label="Modelscope"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

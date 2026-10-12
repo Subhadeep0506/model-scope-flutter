@@ -2,12 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../config/theme/app_typography.dart';
 
-/// Which monospace role a label plays.
 enum MonoStyle { overline, meta, tag, sliderLabel, sliderValue }
 
-/// Every run of monospace metadata in the mockups: the screen overlines, the
-/// session timestamps, `Q8_0`, `T 0.70`, the metrics row and the slider
-/// labels and values.
 class MonoLabel extends StatelessWidget {
   const MonoLabel(
     this.text, {
@@ -20,7 +16,6 @@ class MonoLabel extends StatelessWidget {
   final String text;
   final MonoStyle variant;
 
-  /// Overrides the colour the variant would otherwise use.
   final Color? color;
 
   final int? maxLines;

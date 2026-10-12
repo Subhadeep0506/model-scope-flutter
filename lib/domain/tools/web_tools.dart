@@ -14,25 +14,14 @@ const int kSnippetLimit = AgentLimits.defaultWebSnippetChars;
 const int kPageLimit = AgentLimits.defaultWebPageChars;
 
 /// What the current agent run wants from the web.
-///
-/// Held in one mutable object the run writes before it starts, for the same
-/// reason [RetrievalSettings] is: a tool is built once in the registry and
-/// knows nothing about the run calling it, so the numbers have to be read per
-/// call rather than captured when the tool was made.
 class WebSearchSettings {
   WebSearchSettings({
     this.maxResults = kMaxResults,
     this.snippetLimit = kSnippetLimit,
     this.pageLimit = kPageLimit,
   });
-
-  /// How many pages a search asks Tavily for.
   int maxResults;
-
-  /// How much of each result's extract survives into the model's context.
   int snippetLimit;
-
-  /// How much of a fetched page does.
   int pageLimit;
 
   void apply({int? maxResults, int? snippetLimit, int? pageLimit}) {
@@ -108,8 +97,6 @@ List<ToolDefinition> webTools({
   required FirecrawlWebCrawlerService crawler,
   WebSearchSettings? settings,
 }) {
-  // One holder for both tools, so an agent's limits are written once and a
-  // search and the page read that follows it agree about the budget.
   final limits = settings ?? WebSearchSettings();
   return <ToolDefinition>[
     webSearchTool(search, settings: limits),

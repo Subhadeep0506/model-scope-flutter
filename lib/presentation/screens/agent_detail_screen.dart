@@ -22,13 +22,8 @@ import '../widgets/section_card.dart';
 import '../widgets/square_icon_button.dart';
 
 /// One agent: what it does, what it needs, and what happened when it ran.
-///
-/// The configuration and the run share a screen, as the mockups draw them —
-/// pressing Run collapses the description, model and input cards away so the
-/// trace has the height, and the run button stays at the top as `Stop`.
 class AgentDetailScreen extends ConsumerStatefulWidget {
   const AgentDetailScreen({super.key, required this.agentId});
-
   final String agentId;
 
   @override
@@ -36,9 +31,6 @@ class AgentDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
-  /// Held in a field rather than read in [dispose]: `ref` leans on the
-  /// `BuildContext`, which is gone by the time a widget is being unmounted.
-  /// The provider is not auto-disposed, so the notifier outlives this screen.
   late final AgentRunViewModel _agent = ref.read(
     agentRunViewModelProvider.notifier,
   );
@@ -46,8 +38,6 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // After the first frame, so the notifier is not written to while the
-    // widget tree is still building.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _agent.open(widget.agentId),
     );
@@ -55,9 +45,6 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
 
   @override
   void dispose() {
-    // Cancels a run still in flight, so leaving the screen — by the back
-    // square, the system gesture or a tab switch — does not leave a stream
-    // writing into a state nothing is drawing.
     _agent.close();
     super.dispose();
   }
@@ -67,11 +54,6 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     final state = ref.watch(agentRunViewModelProvider);
     final metrics = context.metrics;
 
-    // Re-read the agent whenever the list changes. Only the builder changes
-    // it, so this fires when the user has just saved an edit or reset a
-    // built-in on the screen above — without it, popping back would show what
-    // the agent used to be and run that instead. Never mid-run: the pipeline
-    // in flight is the one already loaded.
     ref.listen(agentsProvider, (_, next) {
       if (next.isLoading || state.isRunning) return;
       _agent.open(widget.agentId);
@@ -113,7 +95,6 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
 /// Back on the left, then the tool names in mono caps and the agent's name.
 class _Header extends ConsumerWidget {
   const _Header({required this.state});
-
   final AgentRunState state;
 
   @override
@@ -160,8 +141,6 @@ class _Header extends ConsumerWidget {
     );
   }
 
-  /// Back out of a looked-at run to the configuration first, so one tap does
-  /// not leave the screen from two levels in.
   void _back(BuildContext context, WidgetRef ref) {
     if (state.viewing != null) {
       ref.read(agentRunViewModelProvider.notifier).backToIdle();
@@ -172,12 +151,6 @@ class _Header extends ConsumerWidget {
 }
 
 /// Where an agent is edited from.
-///
-/// Every agent can be edited, built-in or not. A built-in's own file is in the
-/// bundle where nothing on the device can touch it, so `Edit agent` saves a
-/// copy under the same id that shadows it — same card, same name, same run
-/// history — and `Reset to built-in`, in the builder, throws that copy away.
-/// `Duplicate` is still there for keeping the original alongside a variant.
 class _Menu extends StatelessWidget {
   const _Menu({required this.agent});
 
@@ -281,8 +254,6 @@ class _Body extends ConsumerWidget {
             isStreaming: state.isRunning,
             isThinking: state.isThinking,
             error: state.viewing?.error ?? state.error,
-            // A past run carries its own, recorded when it finished, so
-            // editing the agent since cannot change how its history draws.
             isStructured: state.showsStructured,
             view: state.visibleView,
           ),
@@ -300,7 +271,6 @@ class _Body extends ConsumerWidget {
 
 class _Description extends StatelessWidget {
   const _Description({required this.state});
-
   final AgentRunState state;
 
   @override
@@ -381,8 +351,6 @@ class _RunAgain extends StatelessWidget {
   }
 }
 
-/// Why the agent cannot run, in the amber the bench card uses for the same
-/// line.
 class _Blocker extends StatelessWidget {
   const _Blocker({required this.text});
 

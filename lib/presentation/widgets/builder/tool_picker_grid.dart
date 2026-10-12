@@ -6,13 +6,6 @@ import '../../../config/theme/app_metrics.dart';
 import '../../../config/theme/app_palette.dart';
 import 'labelled_field.dart';
 
-/// What a tool is called on screen.
-///
-/// `web_search` is what a template writes and what the model is told; `Web
-/// search` is what a person picking one should read. Lives here rather than on
-/// the tool so `lib/domain` stays free of anything presentational, the same
-/// split as `agentIconFor`. An unlisted tool falls back to its own name, so a
-/// tool added later appears in the grid without being registered twice.
 String toolLabelFor(String name) => switch (name) {
   'web_search' => 'Web search',
   'read_web_page' => 'Read a page',
@@ -35,12 +28,6 @@ IconData toolIconFor(String name) => switch (name) {
   _ => Icons.build_outlined,
 };
 
-/// The grid of tools a step can be given, and the warning when the chosen one
-/// cannot run yet.
-///
-/// Two columns as the mockups draw it, but built from the registry rather than
-/// the four tools they name — this build registers seven, and a grid that had
-/// to be edited every time a tool was added would go stale.
 class ToolPickerGrid extends ConsumerWidget {
   const ToolPickerGrid({
     super.key,
@@ -79,8 +66,6 @@ class ToolPickerGrid extends ConsumerWidget {
                         selected: names[row + 1] == selected,
                         onTap: () => onSelected(names[row + 1]),
                       )
-                    // An odd number of tools leaves a gap rather than a
-                    // stretched last tile.
                     : const SizedBox.shrink(),
               ),
             ],
@@ -92,11 +77,6 @@ class ToolPickerGrid extends ConsumerWidget {
   }
 }
 
-/// The amber `Needs Tavily key` line, asked of the registry.
-///
-/// A future rather than a value because readiness means reading the keychain,
-/// and the answer changes while the builder is open — pasting a key into
-/// Settings and coming back should clear it.
 class _Blocker extends ConsumerWidget {
   const _Blocker({required this.tool});
 

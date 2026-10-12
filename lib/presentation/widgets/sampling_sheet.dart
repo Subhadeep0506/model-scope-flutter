@@ -9,8 +9,6 @@ import '../../data/models/sampler_settings.dart';
 import 'labelled_slider.dart';
 import 'sheet_scaffold.dart';
 
-/// The Sampling sheet: four monospace-labelled sliders, the system prompt, and
-/// a reset.
 class SamplingSheet extends ConsumerStatefulWidget {
   const SamplingSheet({super.key});
 
@@ -22,14 +20,10 @@ class SamplingSheet extends ConsumerStatefulWidget {
 }
 
 class _SamplingSheetState extends ConsumerState<SamplingSheet> {
-  /// Long enough that a burst of typing is one write, short enough that the
-  /// prompt is saved before the sheet is normally dismissed.
   static const Duration _typingPause = Duration(milliseconds: 500);
 
   final TextEditingController _prompt = TextEditingController();
 
-  /// Held while a thumb is dragged, so the slider tracks the finger without a
-  /// disk write and a model call on every frame.
   SamplerSettings? _draft;
 
   Timer? _promptTimer;
@@ -37,7 +31,6 @@ class _SamplingSheetState extends ConsumerState<SamplingSheet> {
 
   @override
   void deactivate() {
-    // Flush before the sheet leaves the tree, while `ref` is still usable.
     _flushPrompt();
     super.deactivate();
   }
@@ -149,8 +142,7 @@ class _SamplingSheetState extends ConsumerState<SamplingSheet> {
     LabelledSlider(
       label: 'CHAT_MEMORY',
       value: settings.historyTurns.toDouble(),
-      // Zero is a setting, not an absence of one: every prompt is answered
-      // with no recollection of the conversation.
+
       display: settings.historyTurns == 0
           ? 'OFF'
           : '${settings.historyTurns} turns',

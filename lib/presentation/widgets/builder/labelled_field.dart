@@ -3,13 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../config/theme/app_metrics.dart';
 import '../../../config/theme/app_palette.dart';
 
-/// A text field that keeps its caret where the user left it.
-///
-/// Every field in the builder goes through this. A `TextField` fed straight
-/// from state is rewritten on every keystroke, which sends the caret to the
-/// end of the line — so the controller lives here and is only written to when
-/// the value changed from somewhere other than this field. The same pattern
-/// as `_Field` in `agent_inputs_card.dart`.
 class BuilderField extends StatefulWidget {
   const BuilderField({
     super.key,
@@ -26,7 +19,6 @@ class BuilderField extends StatefulWidget {
   final String value;
   final ValueChanged<String> onChanged;
 
-  /// Drawn above the field. Null draws nothing, for a field in a row.
   final String? label;
 
   final String? hint;
@@ -34,7 +26,6 @@ class BuilderField extends StatefulWidget {
   final bool enabled;
   final TextInputType? keyboardType;
 
-  /// Monospace, for JSON and for anything that becomes an identifier.
   final bool mono;
 
   @override
@@ -49,8 +40,7 @@ class _BuilderFieldState extends State<BuilderField> {
   @override
   void didUpdateWidget(BuilderField old) {
     super.didUpdateWidget(old);
-    // Only when something other than typing changed it — writing on every
-    // keystroke would move the caret to the end of the line.
+
     if (widget.value != _controller.text && widget.value != old.value) {
       _controller.text = widget.value;
     }
@@ -96,8 +86,6 @@ class _BuilderFieldState extends State<BuilderField> {
   }
 }
 
-/// The `Basics` / `Inputs` / `Pipeline` headings, with an optional action on
-/// the right — `+ Input`, as the mockups draw it.
 class BuilderSection extends StatelessWidget {
   const BuilderSection({
     super.key,
@@ -135,7 +123,6 @@ class BuilderSection extends StatelessWidget {
   }
 }
 
-/// The amber line a step shows when the tool it names cannot run yet.
 class BuilderWarning extends StatelessWidget {
   const BuilderWarning({super.key, required this.text});
 

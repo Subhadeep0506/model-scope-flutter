@@ -10,8 +10,6 @@ import 'mono_chip.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// One agent on the bench: what it is, which tools it reaches for, and how it
-/// last got on.
 class AgentCard extends StatelessWidget {
   const AgentCard({
     super.key,
@@ -21,11 +19,7 @@ class AgentCard extends StatelessWidget {
   });
 
   final AgentListing listing;
-
-  /// Passed in rather than read from the clock here, so every card on one
-  /// build says `6d ago` against the same moment.
   final DateTime now;
-
   final VoidCallback onOpen;
 
   @override
@@ -67,8 +61,7 @@ class AgentCard extends StatelessWidget {
               runSpacing: metrics.gapSm,
               children: <Widget>[
                 for (final tool in template.toolNames) MonoChip(tool),
-                // So it is obvious which shipped agents have been changed, and
-                // which therefore have a built-in to go back to.
+
                 if (listing.agent.isEdited)
                   MonoChip('EDITED', color: palette.primary),
               ],
@@ -82,11 +75,6 @@ class AgentCard extends StatelessWidget {
   }
 }
 
-/// The last line of the card: why it cannot run, or when it last did.
-///
-/// The blocker wins over the run stamp. An agent that needs a key the user has
-/// not set is worth saying on the card rather than three taps in, and there is
-/// only room for one line.
 class _Footer extends StatelessWidget {
   const _Footer({required this.listing, required this.now});
 

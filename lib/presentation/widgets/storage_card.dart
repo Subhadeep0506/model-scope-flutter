@@ -8,13 +8,9 @@ import '../../data/models/byte_size.dart';
 import 'mono_label.dart';
 import 'section_card.dart';
 
-/// What the app itself is holding on disk, and a way to let it go. Downloaded
-/// weights are excluded on purpose — those are removed one at a time from the
-/// Models list, where the cost of each is visible.
 class StorageCard extends ConsumerWidget {
   const StorageCard({super.key});
 
-  /// Reference point for the bar only; there is no quota to report.
   static const int _barCeilingBytes = 500 * 1000 * 1000;
 
   @override

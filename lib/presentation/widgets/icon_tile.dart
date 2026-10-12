@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme/app_metrics.dart';
 import '../../config/theme/app_palette.dart';
 
-/// The soft green rounded square that carries an icon: the chat glyph on a
-/// session row and the chip glyph on the model strip and model rows.
 class IconTile extends StatelessWidget {
   const IconTile({
     super.key,

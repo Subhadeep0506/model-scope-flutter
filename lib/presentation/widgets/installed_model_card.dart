@@ -7,9 +7,6 @@ import 'mono_label.dart';
 import 'section_card.dart';
 import 'square_icon_button.dart';
 
-/// One row of the Models list: title, repository, three mono chips, and trash.
-///
-/// Tapping the row makes the model active; the chips are informational only.
 class InstalledModelCard extends StatelessWidget {
   const InstalledModelCard({
     super.key,
@@ -22,11 +19,8 @@ class InstalledModelCard extends StatelessWidget {
 
   final ModelDescriptor model;
 
-  /// The model Chat answers with, marked with a check.
   final bool isActive;
 
-  /// Whether a projector is installed for this model's repository, which is
-  /// what lets it read an image.
   final bool hasVision;
 
   final VoidCallback onSelect;
@@ -125,7 +119,6 @@ class _Details extends StatelessWidget {
   }
 }
 
-/// The small outlined monospace tag the mockup repeats three times per row.
 class _Chip extends StatelessWidget {
   const _Chip({required this.text});
 
